@@ -260,9 +260,27 @@ else:
         st.sidebar.error(f"Error: {st.session_state.db_error}")
 
 
-# 5. Dashboard Utama
-st.markdown('<h1 class="main-title">MotherDuck Product Catalog Portal</h1>', unsafe_allow_html=True)
-st.markdown('<p class="subtitle">Manajemen Inventaris & Katalog Produk Cloud Real-time</p>', unsafe_allow_html=True)
+# 5. Dashboard Utama (Dinamis Berdasarkan Menu yang Dipilih)
+menu_titles = {
+    "🛍️ Katalog Produk": {
+        "title": "MotherDuck Product Catalog Portal",
+        "subtitle": "Manajemen Inventaris & Katalog Produk Cloud Real-time"
+    },
+    "🛒 Keranjang Belanja": {
+        "title": "MotherDuck Shopping Cart Portal",
+        "subtitle": "Simulasi Pembelian & Pemesanan Barang Cloud Real-time"
+    }
+}
+
+# Tentukan judul berdasarkan menu aktif (default ke Katalog Produk)
+current_menu = st.session_state.get('menu', "🛍️ Katalog Produk")
+title_info = menu_titles.get(current_menu, {
+    "title": "MotherDuck Cloud Portal",
+    "subtitle": "Manajemen & Portal Data Cloud Real-time"
+})
+
+st.markdown(f'<h1 class="main-title">{title_info["title"]}</h1>', unsafe_allow_html=True)
+st.markdown(f'<p class="subtitle">{title_info["subtitle"]}</p>', unsafe_allow_html=True)
 st.markdown('<div class="gradient-line"></div>', unsafe_allow_html=True)
 
 # Jika belum terhubung, tampilkan panduan kesalahan kredensial secrets.toml
