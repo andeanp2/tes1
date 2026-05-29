@@ -836,18 +836,21 @@ else:
                 else:
                     # Gunakan nama baru custom sebagai Kode_Barang
                     entry_name = custom_name.strip()
+                    detail_str = ", ".join(selected_names)
                     
                     # Cek apakah barang sudah ada di draft PO
                     found = False
                     for item in st.session_state.cart:
                         if item.get('name') == entry_name:
                             item['berat'] = item.get('berat', 0.0) + berat
+                            item['detail_gabungan'] = detail_str
                             found = True
                             break
                             
                     if not found:
                         st.session_state.cart.append({
                             'name': entry_name,
+                            'detail_gabungan': detail_str,
                             'berat': berat
                         })
                         
@@ -867,8 +870,9 @@ else:
                 st.dataframe(
                     df_cart,
                     column_config={
-                        "name": st.column_config.TextColumn("Kode Barang (Nama Produk)", width="large"),
-                        "berat": st.column_config.NumberColumn("Berat Satuan (kg/ton)", format="%.2f")
+                        "name": st.column_config.TextColumn("Kode Barang (Nama Baru)", width="medium"),
+                        "detail_gabungan": st.column_config.TextColumn("Detail Gabungan Produk", width="large"),
+                        "berat": st.column_config.NumberColumn("Berat Satuan (gr)", format="%.2f")
                     },
                     use_container_width=True,
                     hide_index=True
@@ -876,7 +880,7 @@ else:
                 
                 # Hitung total berat
                 total_berat = df_cart['berat'].sum()
-                st.markdown(f"**Total Berat PO:** `{total_berat:,.2f}` kg/ton")
+                st.markdown(f"**Total Berat PO:** `{total_berat:,.2f}` gr")
                 
                 col_clear, col_pay = st.columns(2)
                 with col_clear:
@@ -895,4 +899,4 @@ else:
                         st.session_state.cart = []
                         st.session_state.pending_po_id = generate_po_id() # generate new ID for next PO
                         st.toast(f"PO {po_id} Berhasil Diterbitkan! 🎉", icon="✅")
-                        st.success(f"Sukses! Purchase Order **{po_id}** senilai total **{total_berat:,.2f}** kg/ton berat satuan telah berhasil diproses secara online.")
+                        st.success(f"Sukses! Purchase Order **{po_id}** senilai total **{total_berat:,.2f} gr** berat satuan telah berhasil diproses secara online.")
