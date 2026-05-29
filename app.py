@@ -189,13 +189,13 @@ def get_column_mapping(df):
 
 def create_default_table(con, table_name="Product_catalog"):
     try:
-        # Query pembuatan tabel Product_catalog dengan skema baru yang disederhanakan
+        # Query pembuatan tabel Product_catalog dengan skema baru yang disederhanakan dan waktu WIB
         create_query = f"""
         CREATE TABLE IF NOT EXISTS {table_name} (
             product_id VARCHAR PRIMARY KEY,
             product_name VARCHAR NOT NULL,
             category VARCHAR,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            created_at TIMESTAMP DEFAULT (CURRENT_TIMESTAMP + INTERVAL 7 HOUR)
         );
         """
         con.execute(create_query)
@@ -552,10 +552,10 @@ if st.session_state.menu == "🛍️ Katalog Produk":
                                         insert_vals.append(val)
                                     placeholders.append("?")
                                 
-                            # Tambahkan kolom waktu masuk jika ada di tabel tapi tidak di input form
+                            # Tambahkan kolom waktu masuk jika ada di tabel tapi tidak di input form (Sesuaikan ke WIB)
                             if created_at_col in columns_info and created_at_col not in insert_cols:
                                 insert_cols.append(created_at_col)
-                                placeholders.append("CURRENT_TIMESTAMP")
+                                placeholders.append("CURRENT_TIMESTAMP + INTERVAL 7 HOUR")
                                 
                             cols_str = ", ".join(insert_cols)
                             placeholders_str = ", ".join(placeholders)
