@@ -163,6 +163,11 @@ def generate_product_id():
     suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
     return f"PROD-{suffix}"
 
+def generate_po_id():
+    today_str = datetime.datetime.now().strftime("%Y%m%d")
+    rand_num = random.randint(1000, 9999)
+    return f"PO-{today_str}-{rand_num}"
+
 # Pastikan new_product_id diinisialisasi dalam session state
 if 'new_product_id' not in st.session_state:
     st.session_state.new_product_id = generate_product_id()
@@ -283,7 +288,7 @@ if st.session_state.conn_connected and 'con' in st.session_state:
     st.sidebar.markdown("### 🧭 Menu Navigasi")
     menu = st.sidebar.radio(
         "Pilih Halaman:",
-        ["🛍️ Katalog Produk", "🛒 Keranjang Belanja"],
+        ["🛍️ Katalog Produk", "🛒 Pemesanan PO"],
         index=0 if st.session_state.get('menu', "🛍️ Katalog Produk") == "🛍️ Katalog Produk" else 1
     )
     st.session_state.menu = menu
@@ -316,9 +321,9 @@ menu_titles = {
         "title": "Katalog Produk",
         "subtitle": "Manajemen Inventaris & Katalog Produk Cloud Real-time"
     },
-    "🛒 Keranjang Belanja": {
-        "title": "MotherDuck Shopping Cart Portal",
-        "subtitle": "Simulasi Pembelian & Pemesanan Barang Cloud Real-time"
+    "🛒 Pemesanan PO": {
+        "title": "Pemesanan Purchase Order (PO)",
+        "subtitle": "Simulasi Pembuatan & Transaksi Purchase Order Cloud Real-time"
     }
 }
 
@@ -791,9 +796,9 @@ if st.session_state.menu == "🛍️ Katalog Produk":
                         st.error(f"Gagal menghapus data dari database: {e}")
 
 else:
-    # ------------------ MENU KERANJANG BELANJA ------------------
-    st.subheader("🛒 Keranjang Belanja")
-    st.markdown("Simulasi Pembelian & Pemesanan Barang dari Katalog Produk Cloud.")
+    # ------------------ MENU PEMESANAN PO ------------------
+    st.subheader("🛒 Pemesanan Purchase Order (PO)")
+    st.markdown("Simulasi Pembuatan & Pemesanan Purchase Order (PO) Barang.")
     st.markdown("---")
     
     if df_catalog.empty:
@@ -804,91 +809,77 @@ else:
         with col_form:
             st.markdown("""
             <div style="background-color: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1); padding: 20px; border-radius: 12px; margin-bottom:15px;">
-                <h4 style="color: #6366F1; margin-top:0; margin-bottom:5px;">➕ Tambah Item</h4>
-                <p style="color: #6B7280; font-size: 0.8rem; margin:0;">Pilih produk yang ada di katalog</p>
+                <h4 style="color: #6366F1; margin-top:0; margin-bottom:5px;">➕ Tambah Item PO</h4>
+                <p style="color: #6B7280; font-size: 0.8rem; margin:0;">Pilih Kode Barang berdasarkan Nama Produk</p>
             </div>
             """, unsafe_allow_html=True)
             
-            # Form tambah item ke keranjang
-            # Display: ID - Name - Price
-            prod_select_list = []
-            prod_detail_map = {}
+            # 1. Pilih kode barang (berasal dari nama produk)
+            prod_names = df_catalog[name_col].dropna().astype(str).unique().tolist()
+            selected_name = st.selectbox("Pilih Kode Barang (Nama Produk)", prod_names)
             
-            for _, row in df_catalog.iterrows():
-                p_id = row[id_col]
-                p_name = row[name_col]
-                p_price = row.get(price_col, 0.0) if price_col in df_catalog.columns else 0.0
-                display_str = f"{p_id} - {p_name} (${p_price:,.2f})"
-                prod_select_list.append(display_str)
-                prod_detail_map[display_str] = {
-                    'id': p_id,
-                    'name': p_name,
-                    'price': float(p_price)
-                }
-                
-            selected_item_str = st.selectbox("Pilih Barang", prod_select_list)
-            qty = st.number_input("Jumlah Pembelian", min_value=1, value=1, step=1)
+            # 2. Tambahkan berat sebagai satuan PO
+            berat = st.number_input("Berat Satuan (kg/ton) *", min_value=0.1, value=10.0, step=1.0, format="%.2f")
             
-            add_to_cart_btn = st.button("Tambahkan ke Keranjang 📥", use_container_width=True)
+            add_to_cart_btn = st.button("Tambahkan ke Draft PO 📥", use_container_width=True)
             
-            if add_to_cart_btn and selected_item_str:
-                item_details = prod_detail_map[selected_item_str]
-                
-                # Cek apakah barang sudah ada di keranjang
+            if add_to_cart_btn and selected_name:
+                # Cek apakah barang sudah ada di draft PO
                 found = False
                 for item in st.session_state.cart:
-                    if item['id'] == item_details['id']:
-                        item['qty'] += qty
-                        item['total'] = item['qty'] * item['price']
+                    if item.get('name') == selected_name:
+                        item['berat'] = item.get('berat', 0.0) + berat
                         found = True
                         break
                         
                 if not found:
                     st.session_state.cart.append({
-                        'id': item_details['id'],
-                        'name': item_details['name'],
-                        'price': item_details['price'],
-                        'qty': qty,
-                        'total': qty * item_details['price']
+                        'name': selected_name,
+                        'berat': berat
                     })
                     
-                st.toast(f"{item_details['name']} berhasil ditambahkan ke keranjang! 🛒", icon="✅")
+                st.toast(f"{selected_name} ditambahkan ke draft PO! 🛒", icon="✅")
                 st.rerun()
                 
         with col_cart_view:
-            st.markdown("#### 🛍️ Detail Belanjaan Anda")
+            st.markdown("#### 📝 Draft Item Purchase Order")
             
             if not st.session_state.cart:
-                st.info("Keranjang Anda saat ini kosong. Pilih produk di sebelah kiri untuk mulai berbelanja!")
+                st.info("Draft PO Anda saat ini kosong. Tambahkan item di sebelah kiri untuk menyusun PO!")
             else:
-                # Konversi keranjang ke DataFrame
+                # Konversi draft ke DataFrame
                 df_cart = pd.DataFrame(st.session_state.cart)
                 
-                # Tampilkan tabel keranjang belanja dengan style premium
+                # Tampilkan tabel draft dengan style premium
                 st.dataframe(
                     df_cart,
                     column_config={
-                        "id": st.column_config.TextColumn("Product ID", width="small"),
-                        "name": st.column_config.TextColumn("Nama Barang", width="medium"),
-                        "price": st.column_config.NumberColumn("Harga Satuan", format="$ %.2f"),
-                        "qty": st.column_config.NumberColumn("Jumlah", format="%d"),
-                        "total": st.column_config.NumberColumn("Total Harga", format="$ %.2f")
+                        "name": st.column_config.TextColumn("Kode Barang (Nama Produk)", width="large"),
+                        "berat": st.column_config.NumberColumn("Berat Satuan (kg/ton)", format="%.2f")
                     },
                     use_container_width=True,
                     hide_index=True
                 )
                 
-                # Hitung total belanja
-                total_checkout = df_cart['total'].sum()
+                # Hitung total berat
+                total_berat = df_cart['berat'].sum()
+                st.markdown(f"**Total Berat PO:** `{total_berat:,.2f}` kg/ton")
                 
                 col_clear, col_pay = st.columns(2)
                 with col_clear:
-                    if st.button("🗑️ Kosongkan Keranjang", use_container_width=True, type="secondary"):
+                    if st.button("🗑️ Kosongkan Draft PO", use_container_width=True, type="secondary"):
                         st.session_state.cart = []
-                        st.toast("Keranjang belanja dikosongkan.", icon="🗑️")
+                        st.toast("Draft PO dikosongkan.", icon="🗑️")
                         st.rerun()
                 with col_pay:
-                    if st.button(f"💳 Bayar Sekarang (${total_checkout:,.2f})", use_container_width=True, type="primary"):
+                    # Generate ID_PO unik
+                    if 'pending_po_id' not in st.session_state:
+                        st.session_state.pending_po_id = generate_po_id()
+                        
+                    po_id = st.session_state.pending_po_id
+                    
+                    if st.button(f"🧾 Terbitkan PO ({po_id})", use_container_width=True, type="primary"):
                         st.session_state.cart = []
-                        st.toast("Pembayaran Berhasil! Terima kasih telah berbelanja. 🎉", icon="✅")
-                        st.success(f"Sukses! Pemesanan senilai **${total_checkout:,.2f}** telah berhasil diproses secara online.")
+                        st.session_state.pending_po_id = generate_po_id() # generate new ID for next PO
+                        st.toast(f"PO {po_id} Berhasil Diterbitkan! 🎉", icon="✅")
+                        st.success(f"Sukses! Purchase Order **{po_id}** senilai total **{total_berat:,.2f}** kg/ton berat satuan telah berhasil diproses secara online.")
