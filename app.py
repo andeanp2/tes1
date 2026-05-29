@@ -208,22 +208,6 @@ def create_default_table(con, table_name="Product_catalog"):
         );
         """
         con.execute(create_query)
-        
-        # Masukkan sampel data produk agar user langsung melihat data awal
-        sample_data = [
-            ("PROD-R8X9W2", "AeroGlide Mechanical Keyboard", "Electronics"),
-            ("PROD-Z3T1Q8", "Zenith Noise Cancelling Headphones", "Electronics"),
-            ("PROD-H5Y2K7", "HydroPeak Insulated Water Bottle", "Lifestyle"),
-            ("PROD-T9Q5M1", "TerraQuest Waterproof Backpack", "Apparel"),
-            ("PROD-S2K8N4", "Solstice Smart Watch", "Electronics")
-        ]
-        
-        for item in sample_data:
-            con.execute(f"""
-                INSERT INTO {table_name} (product_id, product_name, category, created_at)
-                VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-            """, item)
-            
         return True
     except Exception as e:
         st.error(f"Gagal membuat tabel default: {e}")
