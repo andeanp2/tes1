@@ -433,15 +433,12 @@ if st.session_state.menu == "🛍️ Katalog Produk":
             st.info("Katalog produk kosong. Tambahkan beberapa produk di tab 'Tambah Produk'.")
         else:
             # Form Filter & Pencarian
-            col_search, col_cat, col_status = st.columns([2, 1, 1])
+            col_search, col_cat = st.columns([3, 1])
             with col_search:
                 search_query = st.text_input("🔍 Cari Produk berdasarkan Nama atau ID", "", key="search_bar")
             with col_cat:
                 categories = ["Semua Kategori"] + list(df_catalog[category_col].dropna().unique()) if category_col in df_catalog.columns else ["Semua Kategori"]
                 selected_cat = st.selectbox("Kategori", categories)
-            with col_status:
-                statuses = ["Semua Status"] + list(df_catalog[status_col].dropna().unique()) if status_col in df_catalog.columns else ["Semua Status"]
-                selected_status = st.selectbox("Status", statuses)
                 
             # Terapkan Filter
             df_filtered = df_catalog.copy()
@@ -452,8 +449,6 @@ if st.session_state.menu == "🛍️ Katalog Produk":
                 
             if category_col in df_filtered.columns and selected_cat != "Semua Kategori":
                 df_filtered = df_filtered[df_filtered[category_col] == selected_cat]
-            if status_col in df_filtered.columns and selected_status != "Semua Status":
-                df_filtered = df_filtered[df_filtered[status_col] == selected_status]
                 
             # Perbaiki format tampilan DataFrame
             if not df_filtered.empty:
