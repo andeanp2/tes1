@@ -121,7 +121,7 @@ def init_connection():
     os.environ["MOTHERDUCK_TOKEN"] = md_token
     
     # 4. Hubungkan langsung secara bersih tanpa f-string atau config dict
-    con = duckdb.connect("md:tes_gen")
+    con = duckdb.connect("md:New_db")
     
     # Pastikan ekstensi terinstal dan dimuat secara online
     con.execute("INSTALL motherduck;")
