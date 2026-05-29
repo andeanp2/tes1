@@ -167,6 +167,47 @@ def generate_product_id():
 if 'new_product_id' not in st.session_state:
     st.session_state.new_product_id = generate_product_id()
 
+def check_product_name_similarity(input_name, df_catalog, name_col, current_product_id=None, id_col=None):
+    if not input_name or df_catalog.empty or name_col not in df_catalog.columns:
+        return None
+        
+    import difflib
+    
+    duplicate_exact = []
+    duplicate_substring = []
+    duplicate_fuzzy = []
+    
+    input_name_lower = input_name.strip().lower()
+    
+    for _, row in df_catalog.iterrows():
+        # Lewati produk yang sedang diedit jika ada
+        if current_product_id and id_col in df_catalog.columns and str(row[id_col]) == str(current_product_id):
+            continue
+            
+        existing_name = str(row[name_col])
+        existing_name_lower = existing_name.strip().lower()
+        
+        # 1. Exact match (case-insensitive)
+        if input_name_lower == existing_name_lower:
+            duplicate_exact.append(existing_name)
+        # 2. Substring / inclusion match
+        elif input_name_lower in existing_name_lower or existing_name_lower in input_name_lower:
+            duplicate_substring.append(existing_name)
+        # 3. Typo / fuzzy match (SequenceMatcher ratio >= 0.75)
+        else:
+            similarity = difflib.SequenceMatcher(None, input_name_lower, existing_name_lower).ratio()
+            if similarity >= 0.75:
+                duplicate_fuzzy.append((existing_name, similarity))
+                
+    if not duplicate_exact and not duplicate_substring and not duplicate_fuzzy:
+        return None
+        
+    return {
+        'exact': duplicate_exact,
+        'substring': duplicate_substring,
+        'fuzzy': duplicate_fuzzy
+    }
+
 def get_column_mapping(df):
     mapping = {
         'id': 'product_id',
@@ -553,47 +594,63 @@ if st.session_state.menu == "🛍️ Katalog Produk":
                 if (id_col in columns_info and not val_id) or (name_col in columns_info and not val_name):
                     st.error("Gagal! Kolom wajib (Nama) harus diisi.")
                 else:
-                    # Periksa apakah Product ID sudah terpakai
-                    if not df_catalog.empty and id_col in df_catalog.columns and val_id in df_catalog[id_col].values:
-                        st.error(f"Gagal! ID `{val_id}` sudah digunakan. Coba submit lagi untuk men-generate ID baru.")
+                    # Lakukan pengecekan kemiripan nama produk (Case-insensitive, include, typo)
+                    sim_results = check_product_name_similarity(val_name, df_catalog, name_col)
+                    
+                    has_exact = sim_results and sim_results['exact']
+                    has_substring = sim_results and sim_results['substring']
+                    has_fuzzy = sim_results and sim_results['fuzzy']
+                    
+                    if has_exact:
+                        st.error(f"❌ **Gagal menyimpan!** Produk dengan nama yang sama persis (**{sim_results['exact'][0]}**) sudah terdaftar di database.")
                     else:
-                        try:
-                            # Masukkan data baru ke tabel secara dinamis
-                            insert_cols = []
-                            insert_vals = []
-                            placeholders = []
+                        if has_substring:
+                            st.warning(f"⚠️ **Peringatan Kemiripan (Substring):** Nama produk mirip dengan produk yang ada di database: **{', '.join(sim_results['substring'])}**")
+                        if has_fuzzy:
+                            fuzzy_names = [f"**{name}** (kemiripan {sim*100:.0f}%)" for name, sim in sim_results['fuzzy']]
+                            st.warning(f"⚠️ **Peringatan Kemungkinan Typo:** Nama produk sangat mirip dengan produk di database: {', '.join(fuzzy_names)}")
                             
-                            for col, val in inputs.items():
-                                if 'stock' not in col.lower() and 'stok' not in col.lower():
-                                    insert_cols.append(col)
-                                    if col == price_col:
-                                        insert_vals.append(float(val))
-                                    else:
-                                        insert_vals.append(val)
-                                    placeholders.append("?")
+                        # Periksa apakah Product ID sudah terpakai
+                        if not df_catalog.empty and id_col in df_catalog.columns and val_id in df_catalog[id_col].values:
+                            st.error(f"Gagal! ID `{val_id}` sudah digunakan. Coba submit lagi untuk men-generate ID baru.")
+                        else:
+                            try:
+                                # Masukkan data baru ke tabel secara dinamis
+                                insert_cols = []
+                                insert_vals = []
+                                placeholders = []
                                 
-                            # Tambahkan kolom waktu masuk jika ada di tabel tapi tidak di input form (Sesuaikan ke WIB)
-                            if created_at_col in columns_info and created_at_col not in insert_cols:
-                                insert_cols.append(created_at_col)
-                                placeholders.append("CURRENT_TIMESTAMP + INTERVAL 7 HOUR")
+                                for col, val in inputs.items():
+                                    if 'stock' not in col.lower() and 'stok' not in col.lower():
+                                        insert_cols.append(col)
+                                        if col == price_col:
+                                            insert_vals.append(float(val))
+                                        else:
+                                            insert_vals.append(val)
+                                        placeholders.append("?")
+                                    
+                                # Tambahkan kolom waktu masuk jika ada di tabel tapi tidak di input form (Sesuaikan ke WIB)
+                                if created_at_col in columns_info and created_at_col not in insert_cols:
+                                    insert_cols.append(created_at_col)
+                                    placeholders.append("CURRENT_TIMESTAMP + INTERVAL 7 HOUR")
+                                    
+                                cols_str = ", ".join(insert_cols)
+                                placeholders_str = ", ".join(placeholders)
                                 
-                            cols_str = ", ".join(insert_cols)
-                            placeholders_str = ", ".join(placeholders)
-                            
-                            insert_query = f"INSERT INTO {table_name} ({cols_str}) VALUES ({placeholders_str})"
-                            con.execute(insert_query, insert_vals)
-                            
-                            st.toast(f"Sukses! Produk {val_name} ({val_id}) telah ditambahkan. 🎉", icon="✅")
-                            st.success(f"Produk `{val_name}` berhasil disimpan ke database MotherDuck!")
-                            
-                            # Reset ID produk untuk input berikutnya
-                            st.session_state.new_product_id = generate_product_id()
-                            
-                            # Hapus cache agar data terbaru langsung ter-fetch
-                            st.cache_data.clear()
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Gagal menyimpan data ke MotherDuck: {e}")
+                                insert_query = f"INSERT INTO {table_name} ({cols_str}) VALUES ({placeholders_str})"
+                                con.execute(insert_query, insert_vals)
+                                
+                                st.toast(f"Sukses! Produk {val_name} ({val_id}) telah ditambahkan. 🎉", icon="✅")
+                                st.success(f"Produk `{val_name}` berhasil disimpan ke database MotherDuck!")
+                                
+                                # Reset ID produk untuk input berikutnya
+                                st.session_state.new_product_id = generate_product_id()
+                                
+                                # Hapus cache agar data terbaru langsung ter-fetch
+                                st.cache_data.clear()
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Gagal menyimpan data ke MotherDuck: {e}")
 
     # ----------------- TAB 3: UBAH PRODUK (UPDATE) -----------------
     with tabs[2]:
@@ -640,32 +697,48 @@ if st.session_state.menu == "🛍️ Katalog Produk":
                     if name_col in columns_info and not val_name_e:
                         st.error("Nama produk tidak boleh kosong!")
                     else:
-                        try:
-                            # Bangun kueri UPDATE secara dinamis
-                            update_sets = []
-                            update_vals = []
-                            
-                            for col, val in inputs_e.items():
-                                if 'stock' not in col.lower() and 'stok' not in col.lower():
-                                    update_sets.append(f"{col} = ?")
-                                    if col == price_col:
-                                        update_vals.append(float(val))
-                                    else:
-                                        update_vals.append(val)
-                                    
-                            update_vals.append(selected_id)
-                            update_sets_str = ", ".join(update_sets)
-                            
-                            update_query = f"UPDATE {table_name} SET {update_sets_str} WHERE {id_col} = ?"
-                            con.execute(update_query, update_vals)
-                            
-                            st.toast("Sukses! Produk berhasil diperbarui. 💫", icon="✅")
-                            st.success("Informasi produk berhasil disimpan!")
-                            
-                            st.cache_data.clear()
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Gagal memperbarui data: {e}")
+                        # Lakukan pengecekan kemiripan nama produk (kecuali dirinya sendiri)
+                        sim_results = check_product_name_similarity(val_name_e, df_catalog, name_col, current_product_id=selected_id, id_col=id_col)
+                        
+                        has_exact = sim_results and sim_results['exact']
+                        has_substring = sim_results and sim_results['substring']
+                        has_fuzzy = sim_results and sim_results['fuzzy']
+                        
+                        if has_exact:
+                            st.error(f"❌ **Gagal memperbarui!** Produk dengan nama yang sama persis (**{sim_results['exact'][0]}**) sudah terdaftar di database.")
+                        else:
+                            if has_substring:
+                                st.warning(f"⚠️ **Peringatan Kemiripan (Substring):** Nama produk mirip dengan produk lain di database: **{', '.join(sim_results['substring'])}**")
+                            if has_fuzzy:
+                                fuzzy_names = [f"**{name}** (kemiripan {sim*100:.0f}%)" for name, sim in sim_results['fuzzy']]
+                                st.warning(f"⚠️ **Peringatan Kemungkinan Typo:** Nama produk sangat mirip dengan produk lain di database: {', '.join(fuzzy_names)}")
+                                
+                            try:
+                                # Bangun kueri UPDATE secara dinamis
+                                update_sets = []
+                                update_vals = []
+                                
+                                for col, val in inputs_e.items():
+                                    if 'stock' not in col.lower() and 'stok' not in col.lower():
+                                        update_sets.append(f"{col} = ?")
+                                        if col == price_col:
+                                            update_vals.append(float(val))
+                                        else:
+                                            update_vals.append(val)
+                                        
+                                update_vals.append(selected_id)
+                                update_sets_str = ", ".join(update_sets)
+                                
+                                update_query = f"UPDATE {table_name} SET {update_sets_str} WHERE {id_col} = ?"
+                                con.execute(update_query, update_vals)
+                                
+                                st.toast("Sukses! Produk berhasil diperbarui. 💫", icon="✅")
+                                st.success("Informasi produk berhasil disimpan!")
+                                
+                                st.cache_data.clear()
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Gagal memperbarui data: {e}")
 
     # ----------------- TAB 4: HAPUS PRODUK (DELETE) -----------------
     with tabs[3]:
