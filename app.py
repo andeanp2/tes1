@@ -198,33 +198,30 @@ def get_column_mapping(df):
 
 def create_default_table(con, table_name="Product_catalog"):
     try:
-        # Query pembuatan tabel Product_catalog tanpa kolom stock
+        # Query pembuatan tabel Product_catalog dengan skema baru yang disederhanakan
         create_query = f"""
         CREATE TABLE IF NOT EXISTS {table_name} (
             product_id VARCHAR PRIMARY KEY,
             product_name VARCHAR NOT NULL,
             category VARCHAR,
-            price DOUBLE,
-            description TEXT,
-            status VARCHAR,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
         """
         con.execute(create_query)
         
-        # Masukkan sampel data produk agar user langsung terpukau melihat data awal
+        # Masukkan sampel data produk agar user langsung melihat data awal
         sample_data = [
-            ("PROD-R8X9W2", "AeroGlide Mechanical Keyboard", "Electronics", 129.99, "Ultra-responsive mechanical keyboard with hot-swappable switches and dynamic RGB backlighting.", "Active"),
-            ("PROD-Z3T1Q8", "Zenith Noise Cancelling Headphones", "Electronics", 299.99, "Premium over-ear headphones with hybrid active noise cancellation and 40-hour battery life.", "Active"),
-            ("PROD-H5Y2K7", "HydroPeak Insulated Water Bottle", "Lifestyle", 34.99, "Double-walled vacuum insulated stainless steel water bottle, keeps drinks cold for 24 hours.", "Active"),
-            ("PROD-T9Q5M1", "TerraQuest Waterproof Backpack", "Apparel", 89.99, "Rugged, weather-resistant outdoor backpack with a dedicated laptop compartment.", "Active"),
-            ("PROD-S2K8N4", "Solstice Smart Watch", "Electronics", 199.99, "Sleek smartwatch featuring comprehensive health tracking and built-in GPS.", "Draft")
+            ("PROD-R8X9W2", "AeroGlide Mechanical Keyboard", "Electronics"),
+            ("PROD-Z3T1Q8", "Zenith Noise Cancelling Headphones", "Electronics"),
+            ("PROD-H5Y2K7", "HydroPeak Insulated Water Bottle", "Lifestyle"),
+            ("PROD-T9Q5M1", "TerraQuest Waterproof Backpack", "Apparel"),
+            ("PROD-S2K8N4", "Solstice Smart Watch", "Electronics")
         ]
         
         for item in sample_data:
             con.execute(f"""
-                INSERT INTO {table_name} (product_id, product_name, category, price, description, status, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                INSERT INTO {table_name} (product_id, product_name, category, created_at)
+                VALUES (?, ?, ?, CURRENT_TIMESTAMP)
             """, item)
             
         return True
@@ -389,48 +386,57 @@ created_at_col = col_map.get('created_at', 'created_at')
 # 7. Cabut Pembagian Menu (Navigation Router)
 if st.session_state.menu == "🛍️ Katalog Produk":
     # ------------------ MENU KATALOG PRODUK ------------------
-    
-    # Menghitung Ringkasan Statistik Inventaris (Metrik Premium Tanpa Stock)
+    # Menghitung Ringkasan Statistik Inventaris (Metrik Premium Dinamis)
     if not df_catalog.empty:
         total_products = len(df_catalog)
-        active_products = len(df_catalog[df_catalog[status_col].astype(str).str.lower() == 'active']) if status_col in df_catalog.columns else 0
-        avg_price = df_catalog[price_col].mean() if price_col in df_catalog.columns else 0.0
-        unique_cats = df_catalog[category_col].nunique() if category_col in df_catalog.columns else 0
         
-        # Tampilkan Grid Metrik Bergaya
-        m1, m2, m3, m4 = st.columns(4)
-        with m1:
-            st.markdown(f"""
-            <div class="premium-card">
-                <p style="color: #6B7280; font-size: 0.9rem; font-weight: 500; margin: 0;">Total Produk</p>
-                <h2 style="color: #6366F1; font-size: 2.2rem; font-weight: 700; margin: 5px 0 0 0;">{total_products}</h2>
-                <p style="color: #10B981; font-size: 0.8rem; margin: 5px 0 0 0;">📈 Terkoneksi Real-time</p>
-            </div>
-            """, unsafe_allow_html=True)
-        with m2:
-            st.markdown(f"""
-            <div class="premium-card">
-                <p style="color: #6B7280; font-size: 0.9rem; font-weight: 500; margin: 0;">Aktif di Katalog</p>
-                <h2 style="color: #10B981; font-size: 2.2rem; font-weight: 700; margin: 5px 0 0 0;">{active_products}</h2>
-                <p style="color: #6B7280; font-size: 0.8rem; margin: 5px 0 0 0;">Dari keseluruhan produk</p>
-            </div>
-            """, unsafe_allow_html=True)
-        with m3:
-            st.markdown(f"""
-            <div class="premium-card">
-                <p style="color: #6B7280; font-size: 0.9rem; font-weight: 500; margin: 0;">Rata-rata Harga</p>
-                <h2 style="color: #A855F7; font-size: 2.2rem; font-weight: 700; margin: 5px 0 0 0;">${avg_price:,.2f}</h2>
-                <p style="color: #6B7280; font-size: 0.8rem; margin: 5px 0 0 0;">Nilai Tengah Produk</p>
-            </div>
-            """, unsafe_allow_html=True)
-        with m4:
-            st.markdown(f"""
-            <div class="premium-card">
-                <p style="color: #6B7280; font-size: 0.9rem; font-weight: 500; margin: 0;">Kategori Produk</p>
-                <h2 style="color: #EC4899; font-size: 2.2rem; font-weight: 700; margin: 5px 0 0 0;">{unique_cats}</h2>
-                <p style="color: #6B7280; font-size: 0.8rem; margin: 5px 0 0 0;">Variasi Jenis Kategori</p>
-            </div>
-            """, unsafe_allow_html=True)
+        metrics_data = []
+        metrics_data.append({
+            "title": "Total Produk",
+            "value": f"{total_products}",
+            "color": "#6366F1",
+            "footer": "📈 Terkoneksi Real-time"
+        })
+        
+        if status_col in df_catalog.columns:
+            active_products = len(df_catalog[df_catalog[status_col].astype(str).str.lower() == 'active'])
+            metrics_data.append({
+                "title": "Aktif di Katalog",
+                "value": f"{active_products}",
+                "color": "#10B981",
+                "footer": "Dari keseluruhan produk"
+            })
+            
+        if price_col in df_catalog.columns:
+            avg_price = df_catalog[price_col].mean()
+            metrics_data.append({
+                "title": "Rata-rata Harga",
+                "value": f"${avg_price:,.2f}",
+                "color": "#A855F7",
+                "footer": "Nilai Tengah Produk"
+            })
+            
+        if category_col in df_catalog.columns:
+            unique_cats = df_catalog[category_col].nunique()
+            metrics_data.append({
+                "title": "Kategori Produk",
+                "value": f"{unique_cats}",
+                "color": "#EC4899",
+                "footer": "Variasi Jenis Kategori"
+            })
+            
+        # Tampilkan Grid Metrik secara dinamis
+        if metrics_data:
+            m_cols = st.columns(len(metrics_data))
+            for idx, m_info in enumerate(metrics_data):
+                with m_cols[idx]:
+                    st.markdown(f"""
+                    <div class="premium-card">
+                        <p style="color: #6B7280; font-size: 0.9rem; font-weight: 500; margin: 0;">{m_info['title']}</p>
+                        <h2 style="color: {m_info['color']}; font-size: 2.2rem; font-weight: 700; margin: 5px 0 0 0;">{m_info['value']}</h2>
+                        <p style="color: #6B7280; font-size: 0.8rem; margin: 5px 0 0 0;">{m_info['footer']}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
 
     # Navigasi Tab Modern untuk Management
     tabs = st.tabs(["🔍 Lihat Katalog", "➕ Tambah Produk", "✏️ Ubah Produk", "❌ Hapus Produk"])
@@ -537,13 +543,11 @@ if st.session_state.menu == "🛍️ Katalog Produk":
                     inputs[name_col] = st.text_input("Product Name *", placeholder="Masukkan nama produk", help="Nama lengkap produk.")
                     
             # Tampilkan kolom lainnya jika ada di skema
-            col_cat_in, col_price_in = st.columns(2)
-            with col_cat_in:
-                if category_col in columns_info:
-                    inputs[category_col] = st.text_input("Category", placeholder="Contoh: Electronics, Apparel")
-            with col_price_in:
-                if price_col in columns_info:
-                    inputs[price_col] = st.number_input("Price ($)", min_value=0.0, step=0.01, format="%.2f")
+            if category_col in columns_info:
+                inputs[category_col] = st.text_input("Category", placeholder="Contoh: Electronics, Apparel")
+                    
+            if price_col in columns_info:
+                inputs[price_col] = st.number_input("Price ($)", min_value=0.0, step=0.01, format="%.2f")
                     
             if desc_col in columns_info:
                 inputs[desc_col] = st.text_area("Description", placeholder="Deskripsi lengkap produk...")
@@ -624,13 +628,11 @@ if st.session_state.menu == "🛍️ Katalog Produk":
                 if name_col in columns_info:
                     inputs_e[name_col] = st.text_input("Product Name *", value=product_to_edit[name_col])
                     
-                col_cat_e, col_price_e = st.columns(2)
-                with col_cat_e:
-                    if category_col in columns_info:
-                        inputs_e[category_col] = st.text_input("Category", value=product_to_edit.get(category_col, ''))
-                with col_price_e:
-                    if price_col in columns_info:
-                        inputs_e[price_col] = st.number_input("Price ($)", min_value=0.0, step=0.01, format="%.2f", value=float(product_to_edit.get(price_col, 0.0)))
+                if category_col in columns_info:
+                    inputs_e[category_col] = st.text_input("Category", value=product_to_edit.get(category_col, ''))
+                
+                if price_col in columns_info:
+                    inputs_e[price_col] = st.number_input("Price ($)", min_value=0.0, step=0.01, format="%.2f", value=float(product_to_edit.get(price_col, 0.0)))
                         
                 if desc_col in columns_info:
                     inputs_e[desc_col] = st.text_area("Description", value=product_to_edit.get(desc_col, ''))
