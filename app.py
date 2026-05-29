@@ -3,6 +3,8 @@ import duckdb
 import pandas as pd
 import datetime
 import os
+import random
+import string
 
 # 1. Konfigurasi Halaman & Tema Premium
 st.set_page_config(
@@ -109,6 +111,8 @@ if 'db_error' not in st.session_state:
     st.session_state.db_error = None
 if 'active_tab' not in st.session_state:
     st.session_state.active_tab = "Lihat Katalog"
+if 'cart' not in st.session_state:
+    st.session_state.cart = []
 
 
 # 3. Helpers untuk Koneksi MotherDuck
@@ -153,13 +157,16 @@ def check_table_exists(con, table_name="Product_catalog"):
     except Exception as e:
         return False
 
+def generate_product_id():
+    suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+    return f"PROD-{suffix}"
+
 def get_column_mapping(df):
     mapping = {
         'id': 'product_id',
         'name': 'product_name',
         'category': 'category',
         'price': 'price',
-        'stock': 'stock',
         'description': 'description',
         'status': 'status',
         'created_at': 'created_at'
@@ -176,8 +183,6 @@ def get_column_mapping(df):
             mapping['category'] = col
         elif 'harga' in c_low or 'price' in c_low or 'prc' in c_low:
             mapping['price'] = col
-        elif 'stok' in c_low or 'stock' in c_low or 'qty' in c_low or 'jumlah' in c_low:
-            mapping['stock'] = col
         elif 'desc' in c_low or 'desk' in c_low or 'ket' in c_low:
             mapping['description'] = col
         elif 'status' in c_low or 'stat' in c_low:
@@ -189,14 +194,13 @@ def get_column_mapping(df):
 
 def create_default_table(con, table_name="Product_catalog"):
     try:
-        # Query pembuatan tabel Product_catalog dengan skema standar lengkap
+        # Query pembuatan tabel Product_catalog tanpa kolom stock
         create_query = f"""
         CREATE TABLE IF NOT EXISTS {table_name} (
             product_id VARCHAR PRIMARY KEY,
             product_name VARCHAR NOT NULL,
             category VARCHAR,
             price DOUBLE,
-            stock INTEGER,
             description TEXT,
             status VARCHAR,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -206,17 +210,17 @@ def create_default_table(con, table_name="Product_catalog"):
         
         # Masukkan sampel data produk agar user langsung terpukau melihat data awal
         sample_data = [
-            ("PROD-001", "AeroGlide Mechanical Keyboard", "Electronics", 129.99, 45, "Ultra-responsive mechanical keyboard with hot-swappable switches and dynamic RGB backlighting.", "Active"),
-            ("PROD-002", "Zenith Noise Cancelling Headphones", "Electronics", 299.99, 20, "Premium over-ear headphones with hybrid active noise cancellation and 40-hour battery life.", "Active"),
-            ("PROD-003", "HydroPeak Insulated Water Bottle", "Lifestyle", 34.99, 150, "Double-walled vacuum insulated stainless steel water bottle, keeps drinks cold for 24 hours.", "Active"),
-            ("PROD-004", "TerraQuest Waterproof Backpack", "Apparel", 89.99, 0, "Rugged, weather-resistant outdoor backpack with a dedicated laptop compartment.", "Out of Stock"),
-            ("PROD-005", "Solstice Smart Watch", "Electronics", 199.99, 15, "Sleek smartwatch featuring comprehensive health tracking and built-in GPS.", "Draft")
+            ("PROD-R8X9W2", "AeroGlide Mechanical Keyboard", "Electronics", 129.99, "Ultra-responsive mechanical keyboard with hot-swappable switches and dynamic RGB backlighting.", "Active"),
+            ("PROD-Z3T1Q8", "Zenith Noise Cancelling Headphones", "Electronics", 299.99, "Premium over-ear headphones with hybrid active noise cancellation and 40-hour battery life.", "Active"),
+            ("PROD-H5Y2K7", "HydroPeak Insulated Water Bottle", "Lifestyle", 34.99, "Double-walled vacuum insulated stainless steel water bottle, keeps drinks cold for 24 hours.", "Active"),
+            ("PROD-T9Q5M1", "TerraQuest Waterproof Backpack", "Apparel", 89.99, "Rugged, weather-resistant outdoor backpack with a dedicated laptop compartment.", "Active"),
+            ("PROD-S2K8N4", "Solstice Smart Watch", "Electronics", 199.99, "Sleek smartwatch featuring comprehensive health tracking and built-in GPS.", "Draft")
         ]
         
         for item in sample_data:
             con.execute(f"""
-                INSERT INTO {table_name} (product_id, product_name, category, price, stock, description, status, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                INSERT INTO {table_name} (product_id, product_name, category, price, description, status, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             """, item)
             
         return True
@@ -254,6 +258,18 @@ if st.session_state.conn_connected and 'con' in st.session_state:
     
     # Tentukan nama tabel
     table_name = st.sidebar.text_input("Table Name", value="Product_catalog")
+    
+    # 2. Menu Navigasi Utama
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### 🧭 Menu Navigasi")
+    menu = st.sidebar.radio(
+        "Pilih Halaman:",
+        ["🛍️ Katalog Produk", "🛒 Keranjang Belanja"],
+        index=0
+    )
+    st.session_state.menu = menu
+else:
+    st.session_state.menu = "🛍️ Katalog Produk"
 
 # Tampilkan status koneksi di sidebar
 if st.session_state.conn_connected:
@@ -369,346 +385,435 @@ price_col = col_map.get('price', 'price')
 stock_col = col_map.get('stock', 'stock')
 desc_col = col_map.get('description', 'description')
 status_col = col_map.get('status', 'status')
-created_at_col = col_map.get('created_at', 'created_at')
-
-# 7. Menghitung Ringkasan Statistik Inventaris (Metrik Premium)
-if not df_catalog.empty:
-    total_products = len(df_catalog)
-    active_products = len(df_catalog[df_catalog[status_col].astype(str).str.lower() == 'active']) if status_col in df_catalog.columns else 0
+crea# 7. Cabut Pembagian Menu (Navigation Router)
+if st.session_state.menu == "🛍️ Katalog Produk":
+    # ------------------ MENU KATALOG PRODUK ------------------
     
-    if price_col in df_catalog.columns and stock_col in df_catalog.columns:
-        total_value = (df_catalog[price_col] * df_catalog[stock_col]).sum()
-    else:
-        total_value = 0
+    # Menghitung Ringkasan Statistik Inventaris (Metrik Premium Tanpa Stock)
+    if not df_catalog.empty:
+        total_products = len(df_catalog)
+        active_products = len(df_catalog[df_catalog[status_col].astype(str).str.lower() == 'active']) if status_col in df_catalog.columns else 0
+        avg_price = df_catalog[price_col].mean() if price_col in df_catalog.columns else 0.0
+        unique_cats = df_catalog[category_col].nunique() if category_col in df_catalog.columns else 0
         
-    out_of_stock = len(df_catalog[df_catalog[stock_col] == 0]) if stock_col in df_catalog.columns else 0
-    
-    # Tampilkan Grid Metrik Bergaya
-    m1, m2, m3, m4 = st.columns(4)
-    with m1:
-        st.markdown(f"""
-        <div class="premium-card">
-            <p style="color: #6B7280; font-size: 0.9rem; font-weight: 500; margin: 0;">Total Produk</p>
-            <h2 style="color: #6366F1; font-size: 2.2rem; font-weight: 700; margin: 5px 0 0 0;">{total_products}</h2>
-            <p style="color: #10B981; font-size: 0.8rem; margin: 5px 0 0 0;">📈 Terkoneksi Real-time</p>
-        </div>
-        """, unsafe_allow_html=True)
-    with m2:
-        st.markdown(f"""
-        <div class="premium-card">
-            <p style="color: #6B7280; font-size: 0.9rem; font-weight: 500; margin: 0;">Aktif di Katalog</p>
-            <h2 style="color: #10B981; font-size: 2.2rem; font-weight: 700; margin: 5px 0 0 0;">{active_products}</h2>
-            <p style="color: #6B7280; font-size: 0.8rem; margin: 5px 0 0 0;">Dari keseluruhan produk</p>
-        </div>
-        """, unsafe_allow_html=True)
-    with m3:
-        st.markdown(f"""
-        <div class="premium-card">
-            <p style="color: #6B7280; font-size: 0.9rem; font-weight: 500; margin: 0;">Total Nilai Inventaris</p>
-            <h2 style="color: #A855F7; font-size: 2.2rem; font-weight: 700; margin: 5px 0 0 0;">${total_value:,.2f}</h2>
-            <p style="color: #6B7280; font-size: 0.8rem; margin: 5px 0 0 0;">Harga × Jumlah Stok</p>
-        </div>
-        """, unsafe_allow_html=True)
-    with m4:
-        st.markdown(f"""
-        <div class="premium-card">
-            <p style="color: #6B7280; font-size: 0.9rem; font-weight: 500; margin: 0;">Habis Stok (Out of Stock)</p>
-            <h2 style="color: #EF4444; font-size: 2.2rem; font-weight: 700; margin: 5px 0 0 0;">{out_of_stock}</h2>
-            <p style="color: #EF4444; font-size: 0.8rem; margin: 5px 0 0 0;">⚠️ Memerlukan Restock</p>
-        </div>
-        """, unsafe_allow_html=True)
+        # Tampilkan Grid Metrik Bergaya
+        m1, m2, m3, m4 = st.columns(4)
+        with m1:
+            st.markdown(f"""
+            <div class="premium-card">
+                <p style="color: #6B7280; font-size: 0.9rem; font-weight: 500; margin: 0;">Total Produk</p>
+                <h2 style="color: #6366F1; font-size: 2.2rem; font-weight: 700; margin: 5px 0 0 0;">{total_products}</h2>
+                <p style="color: #10B981; font-size: 0.8rem; margin: 5px 0 0 0;">📈 Terkoneksi Real-time</p>
+            </div>
+            """, unsafe_allow_html=True)
+        with m2:
+            st.markdown(f"""
+            <div class="premium-card">
+                <p style="color: #6B7280; font-size: 0.9rem; font-weight: 500; margin: 0;">Aktif di Katalog</p>
+                <h2 style="color: #10B981; font-size: 2.2rem; font-weight: 700; margin: 5px 0 0 0;">{active_products}</h2>
+                <p style="color: #6B7280; font-size: 0.8rem; margin: 5px 0 0 0;">Dari keseluruhan produk</p>
+            </div>
+            """, unsafe_allow_html=True)
+        with m3:
+            st.markdown(f"""
+            <div class="premium-card">
+                <p style="color: #6B7280; font-size: 0.9rem; font-weight: 500; margin: 0;">Rata-rata Harga</p>
+                <h2 style="color: #A855F7; font-size: 2.2rem; font-weight: 700; margin: 5px 0 0 0;">${avg_price:,.2f}</h2>
+                <p style="color: #6B7280; font-size: 0.8rem; margin: 5px 0 0 0;">Nilai Tengah Produk</p>
+            </div>
+            """, unsafe_allow_html=True)
+        with m4:
+            st.markdown(f"""
+            <div class="premium-card">
+                <p style="color: #6B7280; font-size: 0.9rem; font-weight: 500; margin: 0;">Kategori Produk</p>
+                <h2 style="color: #EC4899; font-size: 2.2rem; font-weight: 700; margin: 5px 0 0 0;">{unique_cats}</h2>
+                <p style="color: #6B7280; font-size: 0.8rem; margin: 5px 0 0 0;">Variasi Jenis Kategori</p>
+            </div>
+            """, unsafe_allow_html=True)
 
-# 8. Navigasi Tab Modern
-tabs = st.tabs(["🔍 Lihat Katalog", "➕ Tambah Produk", "✏️ Ubah Produk", "❌ Hapus Produk"])
+    # Navigasi Tab Modern untuk Management
+    tabs = st.tabs(["🔍 Lihat Katalog", "➕ Tambah Produk", "✏️ Ubah Produk", "❌ Hapus Produk"])
 
-# ----------------- TAB 1: LIHAT KATALOG (READ) -----------------
-with tabs[0]:
-    st.subheader("Daftar Inventaris Product_catalog")
-    
-    if df_catalog.empty:
-        st.info("Katalog produk kosong. Tambahkan beberapa produk di tab 'Tambah Produk'.")
-    else:
-        # Form Filter & Pencarian
-        col_search, col_cat, col_status = st.columns([2, 1, 1])
-        with col_search:
-            search_query = st.text_input("🔍 Cari Produk berdasarkan Nama atau ID", "", key="search_bar")
-        with col_cat:
-            categories = ["Semua Kategori"] + list(df_catalog[category_col].dropna().unique()) if category_col in df_catalog.columns else ["Semua Kategori"]
-            selected_cat = st.selectbox("Kategori", categories)
-        with col_status:
-            statuses = ["Semua Status"] + list(df_catalog[status_col].dropna().unique()) if status_col in df_catalog.columns else ["Semua Status"]
-            selected_status = st.selectbox("Status", statuses)
-            
-        # Terapkan Filter
-        df_filtered = df_catalog.copy()
-        if search_query:
-            id_search = df_filtered[id_col].astype(str).str.contains(search_query, case=False, na=False) if id_col in df_filtered.columns else False
-            name_search = df_filtered[name_col].astype(str).str.contains(search_query, case=False, na=False) if name_col in df_filtered.columns else False
-            df_filtered = df_filtered[id_search | name_search]
-            
-        if category_col in df_filtered.columns and selected_cat != "Semua Kategori":
-            df_filtered = df_filtered[df_filtered[category_col] == selected_cat]
-        if status_col in df_filtered.columns and selected_status != "Semua Status":
-            df_filtered = df_filtered[df_filtered[status_col] == selected_status]
-            
-        # Perbaiki format tampilan DataFrame
-        if not df_filtered.empty:
-            # Tampilkan data dengan tabel Streamlit premium secara dinamis
-            col_config = {}
-            if id_col in df_filtered.columns:
-                col_config[id_col] = st.column_config.TextColumn("Product ID", width="small", required=True)
-            if name_col in df_filtered.columns:
-                col_config[name_col] = st.column_config.TextColumn("Product Name", width="medium")
-            if category_col in df_filtered.columns:
-                col_config[category_col] = st.column_config.TextColumn("Category")
-            if price_col in df_filtered.columns:
-                col_config[price_col] = st.column_config.NumberColumn("Price", format="$ %.2f")
-            if stock_col in df_filtered.columns:
-                col_config[stock_col] = st.column_config.NumberColumn("Stock", format="%d")
-            if desc_col in df_filtered.columns:
-                col_config[desc_col] = st.column_config.TextColumn("Description", width="large")
-            if status_col in df_filtered.columns:
-                col_config[status_col] = st.column_config.SelectboxColumn("Status", options=["Active", "Out of Stock", "Draft"])
-            if created_at_col in df_filtered.columns:
-                col_config[created_at_col] = st.column_config.DatetimeColumn("Date Added", format="DD/MM/YYYY HH:mm")
-
-            st.dataframe(
-                df_filtered,
-                column_config=col_config,
-                use_container_width=True,
-                hide_index=True
-            )
-            
-            # Tampilkan tombol download CSV
-            csv = df_filtered.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                label="📥 Unduh Data sebagai CSV",
-                data=csv,
-                file_name=f"product_catalog_{datetime.date.today()}.csv",
-                mime='text/csv',
-            )
+    # ----------------- TAB 1: LIHAT KATALOG (READ) -----------------
+    with tabs[0]:
+        st.subheader("Katalog Produk Aktif")
+        
+        if df_catalog.empty:
+            st.info("Katalog produk kosong. Tambahkan beberapa produk di tab 'Tambah Produk'.")
         else:
-            st.warning("Tidak ada produk yang cocok dengan pencarian / filter Anda.")
-
-
-# ----------------- TAB 2: TAMBAH PRODUK (CREATE) -----------------
-with tabs[1]:
-    st.subheader("Tambah Produk Baru")
-    st.write("Silakan isi formulir di bawah ini untuk menambahkan produk baru ke katalog MotherDuck.")
-    
-    # Ambil kolom dan tipe data dari tabel yang ada untuk memvalidasi kolom input dinamis
-    columns_info = {}
-    try:
-        schema_query = f"PRAGMA table_info('{table_name}')"
-        schema_rows = con.execute(schema_query).fetchall()
-        for row in schema_rows:
-            # row format: (cid, name, type, notnull, dflt_value, pk)
-            columns_info[row[1]] = row[2].upper()
-    except Exception as e:
-        st.warning(f"Gagal memverifikasi skema secara otomatis. Menggunakan skema standar: {e}")
-        # Default fallback
-        columns_info = {
-            'product_id': 'VARCHAR', 'product_name': 'VARCHAR', 'category': 'VARCHAR',
-            'price': 'DOUBLE', 'stock': 'INTEGER', 'description': 'VARCHAR', 'status': 'VARCHAR'
-        }
-        
-    # Form layout yang cantik dan dinamis berbasis kolom database asli
-    with st.form("add_product_form", clear_on_submit=True):
-        inputs = {}
-        col_id, col_name = st.columns([1, 2])
-        with col_id:
-            if id_col in columns_info:
-                inputs[id_col] = st.text_input("Product ID *", placeholder="Contoh: PROD-101", help="ID unik produk.")
-        with col_name:
-            if name_col in columns_info:
-                inputs[name_col] = st.text_input("Product Name *", placeholder="Masukkan nama produk", help="Nama lengkap produk.")
+            # Form Filter & Pencarian
+            col_search, col_cat, col_status = st.columns([2, 1, 1])
+            with col_search:
+                search_query = st.text_input("🔍 Cari Produk berdasarkan Nama atau ID", "", key="search_bar")
+            with col_cat:
+                categories = ["Semua Kategori"] + list(df_catalog[category_col].dropna().unique()) if category_col in df_catalog.columns else ["Semua Kategori"]
+                selected_cat = st.selectbox("Kategori", categories)
+            with col_status:
+                statuses = ["Semua Status"] + list(df_catalog[status_col].dropna().unique()) if status_col in df_catalog.columns else ["Semua Status"]
+                selected_status = st.selectbox("Status", statuses)
                 
-        # Tampilkan kolom lainnya jika ada di skema
-        col_cat_in, col_price_in, col_stock_in = st.columns(3)
-        with col_cat_in:
-            if category_col in columns_info:
-                inputs[category_col] = st.text_input("Category", placeholder="Contoh: Electronics, Apparel")
-        with col_price_in:
-            if price_col in columns_info:
-                inputs[price_col] = st.number_input("Price ($)", min_value=0.0, step=0.01, format="%.2f")
-        with col_stock_in:
-            if stock_col in columns_info:
-                inputs[stock_col] = st.number_input("Stock", min_value=0, step=1)
+            # Terapkan Filter
+            df_filtered = df_catalog.copy()
+            if search_query:
+                id_search = df_filtered[id_col].astype(str).str.contains(search_query, case=False, na=False) if id_col in df_filtered.columns else False
+                name_search = df_filtered[name_col].astype(str).str.contains(search_query, case=False, na=False) if name_col in df_filtered.columns else False
+                df_filtered = df_filtered[id_search | name_search]
                 
-        if desc_col in columns_info:
-            inputs[desc_col] = st.text_area("Description", placeholder="Deskripsi lengkap produk...")
-        if status_col in columns_info:
-            inputs[status_col] = st.selectbox("Status", ["Active", "Out of Stock", "Draft"])
-            
-        submit_btn = st.form_submit_button("Simpan Produk ke MotherDuck 📥", use_container_width=True)
-        
-        if submit_btn:
-            # Validasi form
-            val_id = inputs.get(id_col, "")
-            val_name = inputs.get(name_col, "")
-            
-            if (id_col in columns_info and not val_id) or (name_col in columns_info and not val_name):
-                st.error("Gagal! Kolom wajib (ID / Nama) harus diisi.")
+            if category_col in df_filtered.columns and selected_cat != "Semua Kategori":
+                df_filtered = df_filtered[df_filtered[category_col] == selected_cat]
+            if status_col in df_filtered.columns and selected_status != "Semua Status":
+                df_filtered = df_filtered[df_filtered[status_col] == selected_status]
+                
+            # Perbaiki format tampilan DataFrame
+            if not df_filtered.empty:
+                col_config = {}
+                if id_col in df_filtered.columns:
+                    col_config[id_col] = st.column_config.TextColumn("Product ID", width="small", required=True)
+                if name_col in df_filtered.columns:
+                    col_config[name_col] = st.column_config.TextColumn("Product Name", width="medium")
+                if category_col in df_filtered.columns:
+                    col_config[category_col] = st.column_config.TextColumn("Category")
+                if price_col in df_filtered.columns:
+                    col_config[price_col] = st.column_config.NumberColumn("Price", format="$ %.2f")
+                if desc_col in df_filtered.columns:
+                    col_config[desc_col] = st.column_config.TextColumn("Description", width="large")
+                if status_col in df_filtered.columns:
+                    col_config[status_col] = st.column_config.SelectboxColumn("Status", options=["Active", "Out of Stock", "Draft"])
+                if created_at_col in df_filtered.columns:
+                    col_config[created_at_col] = st.column_config.DatetimeColumn("Date Added", format="DD/MM/YYYY HH:mm")
+
+                # Pastikan kolom stock tidak ikut ditampilkan
+                display_cols = [c for c in df_filtered.columns if 'stock' not in c.lower() and 'stok' not in c.lower()]
+                
+                st.dataframe(
+                    df_filtered[display_cols],
+                    column_config=col_config,
+                    use_container_width=True,
+                    hide_index=True
+                )
+                
+                # Tampilkan tombol download CSV
+                csv = df_filtered[display_cols].to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="📥 Unduh Data sebagai CSV",
+                    data=csv,
+                    file_name=f"product_catalog_{datetime.date.today()}.csv",
+                    mime='text/csv',
+                )
             else:
-                # Periksa apakah Product ID sudah terpakai
-                if not df_catalog.empty and id_col in df_catalog.columns and val_id in df_catalog[id_col].values:
-                    st.error(f"Gagal! ID `{val_id}` sudah digunakan oleh produk lain. Silakan pilih ID yang unik.")
-                else:
-                    try:
-                        # Masukkan data baru ke tabel secara dinamis
-                        insert_cols = []
-                        insert_vals = []
-                        placeholders = []
-                        
-                        for col, val in inputs.items():
-                            insert_cols.append(col)
-                            if col == stock_col:
-                                insert_vals.append(int(val))
-                            elif col == price_col:
-                                insert_vals.append(float(val))
-                            else:
-                                insert_vals.append(val)
-                            placeholders.append("?")
-                            
-                        # Tambahkan kolom waktu masuk jika ada di tabel tapi tidak di input form
-                        if created_at_col in columns_info and created_at_col not in insert_cols:
-                            insert_cols.append(created_at_col)
-                            placeholders.append("CURRENT_TIMESTAMP")
-                            
-                        cols_str = ", ".join(insert_cols)
-                        placeholders_str = ", ".join(placeholders)
-                        
-                        insert_query = f"INSERT INTO {table_name} ({cols_str}) VALUES ({placeholders_str})"
-                        con.execute(insert_query, insert_vals)
-                        
-                        st.toast(f"Sukses! Produk {val_name} ({val_id}) telah ditambahkan. 🎉", icon="✅")
-                        st.success(f"Produk `{val_name}` berhasil disimpan ke database MotherDuck!")
-                        
-                        # Hapus cache agar data terbaru langsung ter-fetch
-                        st.cache_data.clear()
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Gagal menyimpan data ke MotherDuck: {e}")
+                st.warning("Tidak ada produk yang cocok dengan pencarian / filter Anda.")
 
-
-# ----------------- TAB 3: UBAH PRODUK (UPDATE) -----------------
-with tabs[2]:
-    st.subheader("Ubah Informasi Produk")
-    
-    if df_catalog.empty:
-        st.info("Katalog kosong. Tidak ada produk yang bisa diubah.")
-    else:
-        # Pilih produk untuk diedit secara dinamis
-        product_list = [f"{row[id_col]} - {row[name_col]}" for _, row in df_catalog.iterrows()]
-        selected_prod_str = st.selectbox("Pilih Produk yang Ingin Diubah", product_list)
+    # ----------------- TAB 2: TAMBAH PRODUK (CREATE) -----------------
+    with tabs[1]:
+        st.subheader("Tambah Produk Baru")
+        st.write("Silakan isi formulir di bawah ini untuk menambahkan produk baru ke katalog MotherDuck.")
         
-        selected_id = selected_prod_str.split(" - ")[0]
-        product_to_edit = df_catalog[df_catalog[id_col] == selected_id].iloc[0]
-        
-        # Form edit data
-        with st.form("edit_product_form"):
-            st.markdown(f"**Mengedit Produk ID:** `{selected_id}`")
+        # Ambil kolom dan tipe data dari tabel yang ada
+        columns_info = {}
+        try:
+            schema_query = f"PRAGMA table_info('{table_name}')"
+            schema_rows = con.execute(schema_query).fetchall()
+            for row in schema_rows:
+                columns_info[row[1]] = row[2].upper()
+        except Exception as e:
+            st.warning(f"Gagal memverifikasi skema secara otomatis. Menggunakan skema standar: {e}")
+            columns_info = {
+                'product_id': 'VARCHAR', 'product_name': 'VARCHAR', 'category': 'VARCHAR',
+                'price': 'DOUBLE', 'description': 'VARCHAR', 'status': 'VARCHAR'
+            }
             
-            inputs_e = {}
-            
-            if name_col in columns_info:
-                inputs_e[name_col] = st.text_input("Product Name *", value=product_to_edit[name_col])
-                
-            col_cat_e, col_price_e, col_stock_e = st.columns(3)
-            with col_cat_e:
+        # Form layout yang cantik dan dinamis berbasis kolom database asli
+        with st.form("add_product_form", clear_on_submit=True):
+            inputs = {}
+            col_id, col_name = st.columns([1, 2])
+            with col_id:
+                # ID Product Auto-Generated!
+                auto_id = generate_product_id()
+                st.text_input("Product ID (Auto-Generated)", value=auto_id, disabled=True, key="rendered_auto_id")
+                inputs[id_col] = auto_id
+            with col_name:
+                if name_col in columns_info:
+                    inputs[name_col] = st.text_input("Product Name *", placeholder="Masukkan nama produk", help="Nama lengkap produk.")
+                    
+            # Tampilkan kolom lainnya jika ada di skema
+            col_cat_in, col_price_in = st.columns(2)
+            with col_cat_in:
                 if category_col in columns_info:
-                    inputs_e[category_col] = st.text_input("Category", value=product_to_edit.get(category_col, ''))
-            with col_price_e:
+                    inputs[category_col] = st.text_input("Category", placeholder="Contoh: Electronics, Apparel")
+            with col_price_in:
                 if price_col in columns_info:
-                    inputs_e[price_col] = st.number_input("Price ($)", min_value=0.0, step=0.01, format="%.2f", value=float(product_to_edit.get(price_col, 0.0)))
-            with col_stock_e:
-                if stock_col in columns_info:
-                    inputs_e[stock_col] = st.number_input("Stock", min_value=0, step=1, value=int(product_to_edit.get(stock_col, 0)))
+                    inputs[price_col] = st.number_input("Price ($)", min_value=0.0, step=0.01, format="%.2f")
                     
             if desc_col in columns_info:
-                inputs_e[desc_col] = st.text_area("Description", value=product_to_edit.get(desc_col, ''))
-                
+                inputs[desc_col] = st.text_area("Description", placeholder="Deskripsi lengkap produk...")
             if status_col in columns_info:
-                status_opts = ["Active", "Out of Stock", "Draft"]
-                curr_status = product_to_edit.get(status_col, 'Active')
-                default_status_idx = status_opts.index(curr_status) if curr_status in status_opts else 0
-                inputs_e[status_col] = st.selectbox("Status", status_opts, index=default_status_idx)
+                inputs[status_col] = st.selectbox("Status", ["Active", "Out of Stock", "Draft"])
                 
-            save_changes = st.form_submit_button("Simpan Perubahan 💾", use_container_width=True)
+            submit_btn = st.form_submit_button("Simpan Produk ke MotherDuck 📥", use_container_width=True)
             
-            if save_changes:
-                val_name_e = inputs_e.get(name_col, "")
-                if name_col in columns_info and not val_name_e:
-                    st.error("Nama produk tidak boleh kosong!")
+            if submit_btn:
+                val_id = inputs.get(id_col, "")
+                val_name = inputs.get(name_col, "")
+                
+                if (id_col in columns_info and not val_id) or (name_col in columns_info and not val_name):
+                    st.error("Gagal! Kolom wajib (Nama) harus diisi.")
+                else:
+                    # Periksa apakah Product ID sudah terpakai
+                    if not df_catalog.empty and id_col in df_catalog.columns and val_id in df_catalog[id_col].values:
+                        st.error(f"Gagal! ID `{val_id}` sudah digunakan. Coba submit lagi untuk men-generate ID baru.")
+                    else:
+                        try:
+                            # Masukkan data baru ke tabel secara dinamis
+                            insert_cols = []
+                            insert_vals = []
+                            placeholders = []
+                            
+                            for col, val in inputs.items():
+                                if 'stock' not in col.lower() and 'stok' not in col.lower():
+                                    insert_cols.append(col)
+                                    if col == price_col:
+                                        insert_vals.append(float(val))
+                                    else:
+                                        insert_vals.append(val)
+                                    placeholders.append("?")
+                                
+                            # Tambahkan kolom waktu masuk jika ada di tabel tapi tidak di input form
+                            if created_at_col in columns_info and created_at_col not in insert_cols:
+                                insert_cols.append(created_at_col)
+                                placeholders.append("CURRENT_TIMESTAMP")
+                                
+                            cols_str = ", ".join(insert_cols)
+                            placeholders_str = ", ".join(placeholders)
+                            
+                            insert_query = f"INSERT INTO {table_name} ({cols_str}) VALUES ({placeholders_str})"
+                            con.execute(insert_query, insert_vals)
+                            
+                            st.toast(f"Sukses! Produk {val_name} ({val_id}) telah ditambahkan. 🎉", icon="✅")
+                            st.success(f"Produk `{val_name}` berhasil disimpan ke database MotherDuck!")
+                            
+                            # Hapus cache agar data terbaru langsung ter-fetch
+                            st.cache_data.clear()
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Gagal menyimpan data ke MotherDuck: {e}")
+
+    # ----------------- TAB 3: UBAH PRODUK (UPDATE) -----------------
+    with tabs[2]:
+        st.subheader("Ubah Informasi Produk")
+        
+        if df_catalog.empty:
+            st.info("Katalog kosong. Tidak ada produk yang bisa diubah.")
+        else:
+            # Pilih produk untuk diedit secara dinamis
+            product_list = [f"{row[id_col]} - {row[name_col]}" for _, row in df_catalog.iterrows()]
+            selected_prod_str = st.selectbox("Pilih Produk yang Ingin Diubah", product_list)
+            
+            selected_id = selected_prod_str.split(" - ")[0]
+            product_to_edit = df_catalog[df_catalog[id_col] == selected_id].iloc[0]
+            
+            # Form edit data
+            with st.form("edit_product_form"):
+                st.markdown(f"**Mengedit Produk ID:** `{selected_id}`")
+                
+                inputs_e = {}
+                
+                if name_col in columns_info:
+                    inputs_e[name_col] = st.text_input("Product Name *", value=product_to_edit[name_col])
+                    
+                col_cat_e, col_price_e = st.columns(2)
+                with col_cat_e:
+                    if category_col in columns_info:
+                        inputs_e[category_col] = st.text_input("Category", value=product_to_edit.get(category_col, ''))
+                with col_price_e:
+                    if price_col in columns_info:
+                        inputs_e[price_col] = st.number_input("Price ($)", min_value=0.0, step=0.01, format="%.2f", value=float(product_to_edit.get(price_col, 0.0)))
+                        
+                if desc_col in columns_info:
+                    inputs_e[desc_col] = st.text_area("Description", value=product_to_edit.get(desc_col, ''))
+                    
+                if status_col in columns_info:
+                    status_opts = ["Active", "Out of Stock", "Draft"]
+                    curr_status = product_to_edit.get(status_col, 'Active')
+                    default_status_idx = status_opts.index(curr_status) if curr_status in status_opts else 0
+                    inputs_e[status_col] = st.selectbox("Status", status_opts, index=default_status_idx)
+                    
+                save_changes = st.form_submit_button("Simpan Perubahan 💾", use_container_width=True)
+                
+                if save_changes:
+                    val_name_e = inputs_e.get(name_col, "")
+                    if name_col in columns_info and not val_name_e:
+                        st.error("Nama produk tidak boleh kosong!")
+                    else:
+                        try:
+                            # Bangun kueri UPDATE secara dinamis
+                            update_sets = []
+                            update_vals = []
+                            
+                            for col, val in inputs_e.items():
+                                if 'stock' not in col.lower() and 'stok' not in col.lower():
+                                    update_sets.append(f"{col} = ?")
+                                    if col == price_col:
+                                        update_vals.append(float(val))
+                                    else:
+                                        update_vals.append(val)
+                                    
+                            update_vals.append(selected_id)
+                            update_sets_str = ", ".join(update_sets)
+                            
+                            update_query = f"UPDATE {table_name} SET {update_sets_str} WHERE {id_col} = ?"
+                            con.execute(update_query, update_vals)
+                            
+                            st.toast("Sukses! Produk berhasil diperbarui. 💫", icon="✅")
+                            st.success("Informasi produk berhasil disimpan!")
+                            
+                            st.cache_data.clear()
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Gagal memperbarui data: {e}")
+
+    # ----------------- TAB 4: HAPUS PRODUK (DELETE) -----------------
+    with tabs[3]:
+        st.subheader("Hapus Produk dari Katalog")
+        st.markdown("""
+        <div style="background-color: rgba(239, 68, 68, 0.1); border-left: 5px solid #EF4444; padding: 15px; border-radius: 4px; margin-bottom: 20px;">
+            <strong style="color: #EF4444;">Peringatan Penting:</strong> Penghapusan produk bersifat permanen dan data yang dihapus akan langsung terhapus dari tabel database MotherDuck Cloud Anda.
+        </div>
+        """, unsafe_allow_html=True)
+        
+        if df_catalog.empty:
+            st.info("Katalog kosong. Tidak ada produk yang bisa dihapus.")
+        else:
+            # Pilih produk untuk dihapus secara dinamis
+            del_product_list = [f"{row[id_col]} - {row[name_col]}" for _, row in df_catalog.iterrows()]
+            selected_del_str = st.selectbox("Pilih Produk yang Ingin Dihapus", del_product_list, key="del_select")
+            
+            selected_del_id = selected_del_str.split(" - ")[0]
+            prod_del_name = selected_del_str.split(" - ")[1]
+            
+            # Konfirmasi penghapusan demi keamanan data
+            st.markdown(f"Anda memilih untuk menghapus produk berikut:")
+            st.code(f"ID: {selected_del_id}\nNama: {prod_del_name}")
+            
+            confirm_check = st.checkbox("Saya memahami bahwa tindakan ini tidak dapat dibatalkan.", value=False)
+            
+            delete_btn = st.button("Hapus Produk Secara Permanen 🗑️", type="primary", use_container_width=True)
+            
+            if delete_btn:
+                if not confirm_check:
+                    st.error("Silakan centang kotak persetujuan konfirmasi di atas terlebih dahulu untuk melanjutkan.")
                 else:
                     try:
-                        # Bangun kueri UPDATE secara dinamis
-                        update_sets = []
-                        update_vals = []
+                        delete_query = f"DELETE FROM {table_name} WHERE {id_col} = ?"
+                        con.execute(delete_query, (selected_del_id,))
                         
-                        for col, val in inputs_e.items():
-                            update_sets.append(f"{col} = ?")
-                            if col == stock_col:
-                                update_vals.append(int(val))
-                            elif col == price_col:
-                                update_vals.append(float(val))
-                            else:
-                                update_vals.append(val)
-                                
-                        update_vals.append(selected_id)
-                        update_sets_str = ", ".join(update_sets)
-                        
-                        update_query = f"UPDATE {table_name} SET {update_sets_str} WHERE {id_col} = ?"
-                        con.execute(update_query, update_vals)
-                        
-                        st.toast("Sukses! Produk berhasil diperbarui. 💫", icon="✅")
-                        st.success("Informasi produk berhasil disimpan!")
+                        st.toast(f"Produk {prod_del_name} telah dihapus dari database. 🗑️", icon="⚠️")
+                        st.success(f"Produk `{prod_del_name}` ({selected_del_id}) berhasil dihapus!")
                         
                         st.cache_data.clear()
                         st.rerun()
                     except Exception as e:
-                        st.error(f"Gagal memperbarui data: {e}")
+                        st.error(f"Gagal menghapus data dari database: {e}")
 
-
-# ----------------- TAB 4: HAPUS PRODUK (DELETE) -----------------
-with tabs[3]:
-    st.subheader("Hapus Produk dari Katalog")
-    st.markdown("""
-    <div style="background-color: rgba(239, 68, 68, 0.1); border-left: 5px solid #EF4444; padding: 15px; border-radius: 4px; margin-bottom: 20px;">
-        <strong style="color: #EF4444;">Peringatan Penting:</strong> Penghapusan produk bersifat permanen dan data yang dihapus akan langsung terhapus dari tabel database MotherDuck Cloud Anda.
-    </div>
-    """, unsafe_allow_html=True)
+else:
+    # ------------------ MENU KERANJANG BELANJA ------------------
+    st.subheader("🛒 Keranjang Belanja")
+    st.markdown("Simulasi Pembelian & Pemesanan Barang dari Katalog Produk Cloud.")
+    st.markdown("---")
     
     if df_catalog.empty:
-        st.info("Katalog kosong. Tidak ada produk yang bisa dihapus.")
+        st.warning("Katalog produk kosong. Silakan tambahkan produk terlebih dahulu di menu Katalog Produk.")
     else:
-        # Pilih produk untuk dihapus secara dinamis
-        del_product_list = [f"{row[id_col]} - {row[name_col]}" for _, row in df_catalog.iterrows()]
-        selected_del_str = st.selectbox("Pilih Produk yang Ingin Dihapus", del_product_list, key="del_select")
+        col_form, col_cart_view = st.columns([1, 2])
         
-        selected_del_id = selected_del_str.split(" - ")[0]
-        prod_del_name = selected_del_str.split(" - ")[1]
-        
-        # Konfirmasi penghapusan demi keamanan data
-        st.markdown(f"Anda memilih untuk menghapus produk berikut:")
-        st.code(f"ID: {selected_del_id}\nNama: {prod_del_name}")
-        
-        confirm_check = st.checkbox("Saya memahami bahwa tindakan ini tidak dapat dibatalkan.", value=False)
-        
-        delete_btn = st.button("Hapus Produk Secara Permanen 🗑️", type="primary", use_container_width=True)
-        
-        if delete_btn:
-            if not confirm_check:
-                st.error("Silakan centang kotak persetujuan konfirmasi di atas terlebih dahulu untuk melanjutkan.")
+        with col_form:
+            st.markdown("""
+            <div style="background-color: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1); padding: 20px; border-radius: 12px; margin-bottom:15px;">
+                <h4 style="color: #6366F1; margin-top:0; margin-bottom:5px;">➕ Tambah Item</h4>
+                <p style="color: #6B7280; font-size: 0.8rem; margin:0;">Pilih produk yang ada di katalog</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Form tambah item ke keranjang
+            # Display: ID - Name - Price
+            prod_select_list = []
+            prod_detail_map = {}
+            
+            for _, row in df_catalog.iterrows():
+                p_id = row[id_col]
+                p_name = row[name_col]
+                p_price = row.get(price_col, 0.0) if price_col in df_catalog.columns else 0.0
+                display_str = f"{p_id} - {p_name} (${p_price:,.2f})"
+                prod_select_list.append(display_str)
+                prod_detail_map[display_str] = {
+                    'id': p_id,
+                    'name': p_name,
+                    'price': float(p_price)
+                }
+                
+            selected_item_str = st.selectbox("Pilih Barang", prod_select_list)
+            qty = st.number_input("Jumlah Pembelian", min_value=1, value=1, step=1)
+            
+            add_to_cart_btn = st.button("Tambahkan ke Keranjang 📥", use_container_width=True)
+            
+            if add_to_cart_btn and selected_item_str:
+                item_details = prod_detail_map[selected_item_str]
+                
+                # Cek apakah barang sudah ada di keranjang
+                found = False
+                for item in st.session_state.cart:
+                    if item['id'] == item_details['id']:
+                        item['qty'] += qty
+                        item['total'] = item['qty'] * item['price']
+                        found = True
+                        break
+                        
+                if not found:
+                    st.session_state.cart.append({
+                        'id': item_details['id'],
+                        'name': item_details['name'],
+                        'price': item_details['price'],
+                        'qty': qty,
+                        'total': qty * item_details['price']
+                    })
+                    
+                st.toast(f"{item_details['name']} berhasil ditambahkan ke keranjang! 🛒", icon="✅")
+                st.rerun()
+                
+        with col_cart_view:
+            st.markdown("#### 🛍️ Detail Belanjaan Anda")
+            
+            if not st.session_state.cart:
+                st.info("Keranjang Anda saat ini kosong. Pilih produk di sebelah kiri untuk mulai berbelanja!")
             else:
-                try:
-                    delete_query = f"DELETE FROM {table_name} WHERE {id_col} = ?"
-                    con.execute(delete_query, (selected_del_id,))
-                    
-                    st.toast(f"Produk {prod_del_name} telah dihapus dari database. 🗑️", icon="⚠️")
-                    st.success(f"Produk `{prod_del_name}` ({selected_del_id}) berhasil dihapus!")
-                    
-                    st.cache_data.clear()
-                    st.rerun()
-                except Exception as e:
+                # Konversi keranjang ke DataFrame
+                df_cart = pd.DataFrame(st.session_state.cart)
+                
+                # Tampilkan tabel keranjang belanja dengan style premium
+                st.dataframe(
+                    df_cart,
+                    column_config={
+                        "id": st.column_config.TextColumn("Product ID", width="small"),
+                        "name": st.column_config.TextColumn("Nama Barang", width="medium"),
+                        "price": st.column_config.NumberColumn("Harga Satuan", format="$ %.2f"),
+                        "qty": st.column_config.NumberColumn("Jumlah", format="%d"),
+                        "total": st.column_config.NumberColumn("Total Harga", format="$ %.2f")
+                    },
+                    use_container_width=True,
+                    hide_index=True
+                )
+                
+                # Hitung total belanja
+                total_checkout = df_cart['total'].sum()
+                
+                col_clear, col_pay = st.columns(2)
+                with col_clear:
+                    if st.button("🗑️ Kosongkan Keranjang", use_container_width=True, type="secondary"):
+                        st.session_state.cart = []
+                        st.toast("Keranjang belanja dikosongkan.", icon="🗑️")
+                        st.rerun()
+                with col_pay:
+                    if st.button(f"💳 Bayar Sekarang (${total_checkout:,.2f})", use_container_width=True, type="primary"):
+                        st.session_state.cart = []
+                        st.toast("Pembayaran Berhasil! Terima kasih telah berbelanja. 🎉", icon="✅")
+                        st.success(f"Sukses! Pemesanan senilai **${total_checkout:,.2f}** telah berhasil diproses secara online.")              except Exception as e:
                     st.error(f"Gagal menghapus data dari database: {e}")
