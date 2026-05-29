@@ -816,7 +816,12 @@ else:
             
             # 1. Pilih kode barang (gabungan beberapa nama produk)
             prod_names = df_catalog[name_col].dropna().astype(str).unique().tolist()
-            selected_names = st.multiselect("Pilih Nama Produk (Gabungan Kode Barang) *", prod_names, help="Pilih satu atau beberapa produk untuk digabungkan menjadi satu Kode Barang.")
+            selected_names = st.multiselect("Pilih Produk *", prod_names, help="Pilih satu atau beberapa produk dari katalog.")
+            
+            # Input nama baru custom untuk gabungan produk
+            custom_name = ""
+            if selected_names:
+                custom_name = st.text_input("Nama Baru Gabungan (Kode Barang) *", placeholder="Ketik nama baru untuk gabungan produk ini...", help="Tuliskan nama custom untuk mewakili gabungan produk yang Anda pilih.")
             
             # 2. Tambahkan berat sebagai satuan PO
             berat = st.number_input("Berat Satuan (kg/ton) *", min_value=0.1, value=10.0, step=1.0, format="%.2f")
@@ -825,26 +830,28 @@ else:
             
             if add_to_cart_btn:
                 if not selected_names:
-                    st.error("Gagal! Silakan pilih minimal satu nama produk terlebih dahulu.")
+                    st.error("Gagal! Silakan pilih minimal satu produk terlebih dahulu.")
+                elif not custom_name.strip():
+                    st.error("Gagal! Silakan masukkan nama baru untuk gabungan produk ini.")
                 else:
-                    # Gabungkan nama produk menjadi satu string Kode_Barang
-                    combined_name = " + ".join(selected_names)
+                    # Gunakan nama baru custom sebagai Kode_Barang
+                    entry_name = custom_name.strip()
                     
                     # Cek apakah barang sudah ada di draft PO
                     found = False
                     for item in st.session_state.cart:
-                        if item.get('name') == combined_name:
+                        if item.get('name') == entry_name:
                             item['berat'] = item.get('berat', 0.0) + berat
                             found = True
                             break
                             
                     if not found:
                         st.session_state.cart.append({
-                            'name': combined_name,
+                            'name': entry_name,
                             'berat': berat
                         })
                         
-                    st.toast(f"Item PO berhasil ditambahkan! 🛒", icon="✅")
+                    st.toast(f"Item PO '{entry_name}' berhasil ditambahkan! 🛒", icon="✅")
                     st.rerun()
                 
         with col_cart_view:
