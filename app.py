@@ -144,13 +144,13 @@ def get_databases(con):
         return df_dbs.iloc[:, 0].tolist()
     except Exception as e:
         return []
-def check_table_exists(con, table_name="Product_catalog", database="New_db"):
+def check_table_exists(con, table_name="Product_catalog"):
     try:
-        query = f"SELECT count(*) FROM information_schema.tables WHERE table_catalog = '{database}' AND table_name = '{table_name}'"
-        result = con.execute(query).fetchone()[0]
-        return result > 0
+        df_tables = con.execute("SHOW TABLES").fetchdf()
+        if df_tables.empty:
+            return False
+        return table_name in df_tables.iloc[:, 0].values
     except Exception as e:
-        st.error(f"Gagal memeriksa tabel: {e}")
         return False
 
 def create_default_table(con, table_name="Product_catalog"):
@@ -283,7 +283,7 @@ if not st.session_state.conn_connected or 'con' not in st.session_state:
 # Jika sudah terhubung, lakukan inisialisasi pengecekan tabel
 con = st.session_state.con
 
-table_exists = check_table_exists(con, table_name, db_name)
+table_exists = check_table_exists(con, table_name)
 
 if not table_exists:
     st.warning(f"⚠️ Tabel `{table_name}` tidak ditemukan di database `{db_name}`.")
@@ -291,7 +291,7 @@ if not table_exists:
     with create_table_col[0]:
         if st.button("Buat Tabel & Sampel Data Otomatis 🛠️", use_container_width=True):
             with st.spinner("Membuat tabel standar..."):
-                if create_default_table(con, f"{db_name}.{table_name}"):
+                if create_default_table(con, table_name):
                     st.success(f"Tabel `{table_name}` berhasil dibuat beserta data sampel! Refresh halaman...")
                     st.rerun()
     with create_table_col[1]:
@@ -300,16 +300,15 @@ if not table_exists:
 
 # 6. Mengambil Data Terbaru dari MotherDuck
 @st.cache_data(ttl=10) # Cache singkat agar tetap real-time tapi tidak terlalu membebani query
-def fetch_catalog_data(_conn, database, table):
+def fetch_catalog_data(_conn, table):
     try:
-        full_table_path = f"{database}.{table}"
-        df = _conn.execute(f"SELECT * FROM {full_table_path} ORDER BY created_at DESC").fetchdf()
+        df = _conn.execute(f"SELECT * FROM {table} ORDER BY created_at DESC").fetchdf()
         return df
     except Exception as e:
         st.error(f"Gagal mengambil data: {e}")
         return pd.DataFrame()
 
-df_catalog = fetch_catalog_data(con, db_name, table_name)
+df_catalog = fetch_catalog_data(con, table_name)
 
 # 7. Menghitung Ringkasan Statistik Inventaris (Metrik Premium)
 if not df_catalog.empty:
@@ -430,7 +429,7 @@ with tabs[1]:
     # Ambil kolom dan tipe data dari tabel yang ada untuk memvalidasi kolom input dinamis
     columns_info = {}
     try:
-        schema_query = f"PRAGMA table_info('{db_name}.{table_name}')"
+        schema_query = f"PRAGMA table_info('{table_name}')"
         schema_rows = con.execute(schema_query).fetchall()
         for row in schema_rows:
             # row format: (cid, name, type, notnull, dflt_value, pk)
@@ -476,7 +475,7 @@ with tabs[1]:
                 else:
                     try:
                         # Masukkan data baru ke tabel
-                        full_table_path = f"{db_name}.{table_name}"
+                        full_table_path = table_name
                         insert_query = f"""
                             INSERT INTO {full_table_path} (product_id, product_name, category, price, stock, description, status, created_at)
                             VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
@@ -536,7 +535,7 @@ with tabs[2]:
                     st.error("Nama produk tidak boleh kosong!")
                 else:
                     try:
-                        full_table_path = f"{db_name}.{table_name}"
+                        full_table_path = table_name
                         update_query = f"""
                             UPDATE {full_table_path}
                             SET product_name = ?,
@@ -590,7 +589,7 @@ with tabs[3]:
                 st.error("Silakan centang kotak persetujuan konfirmasi di atas terlebih dahulu untuk melanjutkan.")
             else:
                 try:
-                    full_table_path = f"{db_name}.{table_name}"
+                    full_table_path = table_name
                     delete_query = f"DELETE FROM {full_table_path} WHERE product_id = ?"
                     con.execute(delete_query, (selected_del_id,))
                     
