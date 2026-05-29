@@ -170,9 +170,6 @@ def get_column_mapping(df):
         'id': 'product_id',
         'name': 'product_name',
         'category': 'category',
-        'price': 'price',
-        'description': 'description',
-        'status': 'status',
         'created_at': 'created_at'
     }
     
@@ -185,12 +182,6 @@ def get_column_mapping(df):
             mapping['name'] = col
         elif 'kat' in c_low or 'cat' in c_low:
             mapping['category'] = col
-        elif 'harga' in c_low or 'price' in c_low or 'prc' in c_low:
-            mapping['price'] = col
-        elif 'desc' in c_low or 'desk' in c_low or 'ket' in c_low:
-            mapping['description'] = col
-        elif 'status' in c_low or 'stat' in c_low:
-            mapping['status'] = col
         elif 'waktu' in c_low or 'created' in c_low or 'time' in c_low or 'date' in c_low or 'masuk' in c_low:
             mapping['created_at'] = col
             
