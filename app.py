@@ -208,7 +208,7 @@ st.sidebar.markdown("""
 """, unsafe_allow_html=True)
 
 # Parameter default
-db_name = "tes_gen"
+db_name = "New_db"
 schema_name = "main"
 table_name = "Product_catalog"
 
@@ -241,7 +241,7 @@ if st.session_state.conn_connected and 'con' in st.session_state:
 if st.session_state.conn_connected:
     st.sidebar.markdown("""
     <div style="background-color: rgba(16, 185, 129, 0.1); border: 1px solid #10B981; border-radius: 8px; padding: 12px; margin-top: 15px; text-align: center;">
-        <span style="color: #10B981; font-weight: 600; font-size: 0.9rem;">🟢 Terkoneksi Cloud (tes_gen)</span>
+        <span style="color: #10B981; font-weight: 600; font-size: 0.9rem;">🟢 Terkoneksi Cloud (New_db)</span>
     </div>
     """, unsafe_allow_html=True)
 else:
