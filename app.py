@@ -113,6 +113,8 @@ if 'active_tab' not in st.session_state:
     st.session_state.active_tab = "Lihat Katalog"
 if 'cart' not in st.session_state:
     st.session_state.cart = []
+if 'menu' not in st.session_state:
+    st.session_state.menu = "🛍️ Katalog Produk"
 
 
 # 3. Helpers untuk Koneksi MotherDuck
@@ -238,7 +240,7 @@ if st.session_state.conn_connected and 'con' in st.session_state:
     # 2. Menu Navigasi Utama
     st.sidebar.markdown("---")
     st.sidebar.markdown("### 🧭 Menu ")
-    st.sidebar.info("🛍️ Katalog Produk (Database Produk)")
+    st.sidebar.info(f"{st.session_state.menu}")
     st.session_state.menu = "🛍️ Katalog Produk"
 else:
     st.session_state.menu = "🛍️ Katalog Produk"
