@@ -814,32 +814,38 @@ else:
             </div>
             """, unsafe_allow_html=True)
             
-            # 1. Pilih kode barang (berasal dari nama produk)
+            # 1. Pilih kode barang (gabungan beberapa nama produk)
             prod_names = df_catalog[name_col].dropna().astype(str).unique().tolist()
-            selected_name = st.selectbox("Pilih Kode Barang (Nama Produk)", prod_names)
+            selected_names = st.multiselect("Pilih Nama Produk (Gabungan Kode Barang) *", prod_names, help="Pilih satu atau beberapa produk untuk digabungkan menjadi satu Kode Barang.")
             
             # 2. Tambahkan berat sebagai satuan PO
             berat = st.number_input("Berat Satuan (kg/ton) *", min_value=0.1, value=10.0, step=1.0, format="%.2f")
             
             add_to_cart_btn = st.button("Tambahkan ke Draft PO 📥", use_container_width=True)
             
-            if add_to_cart_btn and selected_name:
-                # Cek apakah barang sudah ada di draft PO
-                found = False
-                for item in st.session_state.cart:
-                    if item.get('name') == selected_name:
-                        item['berat'] = item.get('berat', 0.0) + berat
-                        found = True
-                        break
-                        
-                if not found:
-                    st.session_state.cart.append({
-                        'name': selected_name,
-                        'berat': berat
-                    })
+            if add_to_cart_btn:
+                if not selected_names:
+                    st.error("Gagal! Silakan pilih minimal satu nama produk terlebih dahulu.")
+                else:
+                    # Gabungkan nama produk menjadi satu string Kode_Barang
+                    combined_name = " + ".join(selected_names)
                     
-                st.toast(f"{selected_name} ditambahkan ke draft PO! 🛒", icon="✅")
-                st.rerun()
+                    # Cek apakah barang sudah ada di draft PO
+                    found = False
+                    for item in st.session_state.cart:
+                        if item.get('name') == combined_name:
+                            item['berat'] = item.get('berat', 0.0) + berat
+                            found = True
+                            break
+                            
+                    if not found:
+                        st.session_state.cart.append({
+                            'name': combined_name,
+                            'berat': berat
+                        })
+                        
+                    st.toast(f"Item PO berhasil ditambahkan! 🛒", icon="✅")
+                    st.rerun()
                 
         with col_cart_view:
             st.markdown("#### 📝 Draft Item Purchase Order")
