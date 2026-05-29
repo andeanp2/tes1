@@ -8,8 +8,8 @@ import string
 
 # 1. Konfigurasi Halaman & Tema Premium
 st.set_page_config(
-    page_title="MotherDuck Product Catalog",
-    page_icon="🛍️",
+    page_title="Portal AWE",
+    page_icon="🪺",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -277,7 +277,7 @@ menu_titles = {
 # Tentukan judul berdasarkan menu aktif (default ke Katalog Produk)
 current_menu = st.session_state.get('menu', "🛍️ Katalog Produk")
 title_info = menu_titles.get(current_menu, {
-    "title": "MotherDuck Cloud Portal",
+    "title": "Portal AWE",
     "subtitle": "Manajemen & Portal Data Cloud Real-time"
 })
 
