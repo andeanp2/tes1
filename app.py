@@ -280,9 +280,16 @@ if st.session_state.conn_connected and 'con' in st.session_state:
     
     # 2. Menu Navigasi Utama
     st.sidebar.markdown("---")
-    st.sidebar.markdown("### 🧭 Menu ")
+    st.sidebar.markdown("### 🧭 Menu Navigasi")
+    menu = st.sidebar.radio(
+        "Pilih Halaman:",
+        ["🛍️ Katalog Produk", "🛒 Keranjang Belanja"],
+        index=0 if st.session_state.get('menu', "🛍️ Katalog Produk") == "🛍️ Katalog Produk" else 1
+    )
+    st.session_state.menu = menu
+    
+    st.sidebar.markdown("### 🧭 Menu Aktif")
     st.sidebar.info(f"{st.session_state.menu}")
-    st.session_state.menu = "🛍️ Katalog Produk"
 else:
     st.session_state.menu = "🛍️ Katalog Produk"
 
