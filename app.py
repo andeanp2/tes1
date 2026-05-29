@@ -161,6 +161,10 @@ def generate_product_id():
     suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
     return f"PROD-{suffix}"
 
+# Pastikan new_product_id diinisialisasi dalam session state
+if 'new_product_id' not in st.session_state:
+    st.session_state.new_product_id = generate_product_id()
+
 def get_column_mapping(df):
     mapping = {
         'id': 'product_id',
@@ -261,13 +265,9 @@ if st.session_state.conn_connected and 'con' in st.session_state:
     
     # 2. Menu Navigasi Utama
     st.sidebar.markdown("---")
-    st.sidebar.markdown("### 🧭 Menu Navigasi")
-    menu = st.sidebar.radio(
-        "Pilih Halaman:",
-        ["🛍️ Katalog Produk", "🛒 Keranjang Belanja"],
-        index=0
-    )
-    st.session_state.menu = menu
+    st.sidebar.markdown("### 🧭 Menu Aktif")
+    st.sidebar.info("🛍️ Katalog Produk (Mandiri)")
+    st.session_state.menu = "🛍️ Katalog Produk"
 else:
     st.session_state.menu = "🛍️ Katalog Produk"
 
@@ -382,10 +382,11 @@ id_col = col_map.get('id', 'product_id')
 name_col = col_map.get('name', 'product_name')
 category_col = col_map.get('category', 'category')
 price_col = col_map.get('price', 'price')
-stock_col = col_map.get('stock', 'stock')
 desc_col = col_map.get('description', 'description')
 status_col = col_map.get('status', 'status')
-crea# 7. Cabut Pembagian Menu (Navigation Router)
+created_at_col = col_map.get('created_at', 'created_at')
+
+# 7. Cabut Pembagian Menu (Navigation Router)
 if st.session_state.menu == "🛍️ Katalog Produk":
     # ------------------ MENU KATALOG PRODUK ------------------
     
@@ -527,8 +528,8 @@ if st.session_state.menu == "🛍️ Katalog Produk":
             inputs = {}
             col_id, col_name = st.columns([1, 2])
             with col_id:
-                # ID Product Auto-Generated!
-                auto_id = generate_product_id()
+                # ID Product Auto-Generated & Stabilized!
+                auto_id = st.session_state.new_product_id
                 st.text_input("Product ID (Auto-Generated)", value=auto_id, disabled=True, key="rendered_auto_id")
                 inputs[id_col] = auto_id
             with col_name:
@@ -590,6 +591,9 @@ if st.session_state.menu == "🛍️ Katalog Produk":
                             
                             st.toast(f"Sukses! Produk {val_name} ({val_id}) telah ditambahkan. 🎉", icon="✅")
                             st.success(f"Produk `{val_name}` berhasil disimpan ke database MotherDuck!")
+                            
+                            # Reset ID produk untuk input berikutnya
+                            st.session_state.new_product_id = generate_product_id()
                             
                             # Hapus cache agar data terbaru langsung ter-fetch
                             st.cache_data.clear()
@@ -815,5 +819,4 @@ else:
                     if st.button(f"💳 Bayar Sekarang (${total_checkout:,.2f})", use_container_width=True, type="primary"):
                         st.session_state.cart = []
                         st.toast("Pembayaran Berhasil! Terima kasih telah berbelanja. 🎉", icon="✅")
-                        st.success(f"Sukses! Pemesanan senilai **${total_checkout:,.2f}** telah berhasil diproses secara online.")              except Exception as e:
-                    st.error(f"Gagal menghapus data dari database: {e}")
+                        st.success(f"Sukses! Pemesanan senilai **${total_checkout:,.2f}** telah berhasil diproses secara online.")
