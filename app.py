@@ -237,8 +237,8 @@ if st.session_state.conn_connected and 'con' in st.session_state:
     
     # 2. Menu Navigasi Utama
     st.sidebar.markdown("---")
-    st.sidebar.markdown("### 🧭 Menu Aktif")
-    st.sidebar.info("🛍️ Katalog Produk (Mandiri)")
+    st.sidebar.markdown("### 🧭 Menu ")
+    st.sidebar.info("🛍️ Katalog Produk (Database Produk)")
     st.session_state.menu = "🛍️ Katalog Produk"
 else:
     st.session_state.menu = "🛍️ Katalog Produk"
@@ -370,7 +370,7 @@ if st.session_state.menu == "🛍️ Katalog Produk":
             "title": "Total Produk",
             "value": f"{total_products}",
             "color": "#6366F1",
-            "footer": "📈 Terkoneksi Real-time"
+            "footer": "📈 Total Produk dalam Katalog Aktif"
         })
         
         if status_col in df_catalog.columns:
