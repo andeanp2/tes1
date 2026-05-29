@@ -265,7 +265,7 @@ else:
 # 5. Dashboard Utama (Dinamis Berdasarkan Menu yang Dipilih)
 menu_titles = {
     "🛍️ Katalog Produk": {
-        "title": "MotherDuck Product Catalog Portal",
+        "title": "Katalog Produk",
         "subtitle": "Manajemen Inventaris & Katalog Produk Cloud Real-time"
     },
     "🛒 Keranjang Belanja": {
