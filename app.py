@@ -2,6 +2,7 @@ import streamlit as st
 import duckdb
 import pandas as pd
 import datetime
+import os
 
 # 1. Konfigurasi Halaman & Tema Premium
 st.set_page_config(
@@ -111,32 +112,35 @@ if 'active_tab' not in st.session_state:
 
 
 # 3. Helpers untuk Koneksi MotherDuck
-def connect_motherduck(token):
-    try:
-        # Menghubungkan secara eksplisit ke MotherDuck Online
-        if token:
-            # Hubungkan ke endpoint cloud MotherDuck
-            conn_str = f"md:?motherduck_token={token}"
-        else:
-            # Menggunakan token dari environment variable jika ada
-            conn_str = "md:"
-            
-        con = duckdb.connect(conn_str)
-        # Pastikan ekstensi motherduck terinstal dan dimuat secara online
-        con.execute("INSTALL motherduck;")
-        con.execute("LOAD motherduck;")
-        st.session_state.db_error = None
-        st.session_state.conn_connected = True
-        return con
-    except Exception as e:
-        st.session_state.db_error = str(e)
-        st.session_state.conn_connected = False
-        return None
+@st.cache_resource
+def init_connection():
+    # 2. Ambil token dan bersihkan dari spasi/karakter tak terlihat (.strip())
+    md_token = st.secrets["MOTHERDUCK_TOKEN"].strip()
+    
+    # 3. Set sebagai Environment Variable sistem
+    os.environ["MOTHERDUCK_TOKEN"] = md_token
+    
+    # 4. Hubungkan langsung secara bersih tanpa f-string atau config dict
+    con = duckdb.connect("md:tes_gen")
+    
+    # Pastikan ekstensi terinstal dan dimuat secara online
+    con.execute("INSTALL motherduck;")
+    con.execute("LOAD motherduck;")
+    return con
+
+# Inisialisasi koneksi secara otomatis saat aplikasi dimulai
+try:
+    con = init_connection()
+    st.session_state.con = con
+    st.session_state.conn_connected = True
+    st.session_state.db_error = None
+except Exception as e:
+    st.session_state.conn_connected = False
+    st.session_state.db_error = str(e)
 
 def get_databases(con):
     try:
         df_dbs = con.execute("SHOW DATABASES").fetchdf()
-        # Ambil kolom pertama yang berisi nama-nama database
         return df_dbs.iloc[:, 0].tolist()
     except Exception as e:
         return []
@@ -203,30 +207,8 @@ st.sidebar.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-st.sidebar.markdown("### 🔑 Kredensial Online")
-
-# Ambil MotherDuck Token
-md_token = st.sidebar.text_input(
-    "MotherDuck Token",
-    type="password",
-    help="Masukkan token MotherDuck Anda. Kosongkan jika sudah diatur di environment variable.",
-    placeholder="md_..."
-)
-
-connect_btn = st.sidebar.button("Sambungkan Ke MotherDuck 🚀", use_container_width=True)
-
-# Simpan kredensial di session state
-if connect_btn or ('con' not in st.session_state and md_token):
-    with st.spinner("Menghubungkan ke MotherDuck Cloud..."):
-        con = connect_motherduck(md_token)
-        if con:
-            st.session_state.con = con
-            st.sidebar.success("Koneksi Cloud Berhasil! 🎉")
-        else:
-            st.sidebar.error("Koneksi Gagal ❌")
-
-# Panel dropdown dinamis setelah terhubung ke MotherDuck Online
-db_name = "my_db"
+# Parameter default
+db_name = "tes_gen"
 schema_name = "main"
 table_name = "Product_catalog"
 
@@ -240,46 +222,26 @@ if st.session_state.conn_connected and 'con' in st.session_state:
     except:
         pass
         
-    st.sidebar.markdown("### 🗄️ Pilih Lingkup Database Cloud")
+    st.sidebar.markdown("### 🗄️ Lingkup Database Cloud")
     
-    # 2. Dapatkan daftar database secara real-time dari MotherDuck Online
-    db_list = get_databases(con)
-    if db_list:
-        db_name = st.sidebar.selectbox("Pilih Database MotherDuck", db_list)
-        # Gunakan database yang dipilih
-        con.execute(f"USE {db_name}")
-    else:
-        db_name = st.sidebar.text_input("Database Name", value="my_db")
-        
-    # 3. Dapatkan skema secara real-time
+    # Database default yang terhubung
+    st.sidebar.text_input("Database Terkoneksi", value=db_name, disabled=True, help="Database target yang telah terhubung.")
+    
+    # Dapatkan skema secara real-time dari MotherDuck
     schema_list = get_schemas(con)
     if schema_list:
         schema_name = st.sidebar.selectbox("Pilih Skema", schema_list)
     else:
         schema_name = st.sidebar.text_input("Schema Name", value="main")
         
-    # 4. Tentukan nama tabel
+    # Tentukan nama tabel
     table_name = st.sidebar.text_input("Table Name", value="Product_catalog")
-    
-    # 5. Fitur buat database baru langsung online di cloud
-    st.sidebar.markdown("---")
-    with st.sidebar.expander("➕ Buat Database Online Baru"):
-        new_db = st.text_input("Nama Database Baru")
-        if st.button("Buat Database Cloud"):
-            if new_db:
-                try:
-                    con.execute(f"CREATE DATABASE {new_db}")
-                    st.success(f"Database '{new_db}' berhasil dibuat!")
-                    st.cache_data.clear()
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Gagal: {e}")
 
 # Tampilkan status koneksi di sidebar
 if st.session_state.conn_connected:
     st.sidebar.markdown("""
     <div style="background-color: rgba(16, 185, 129, 0.1); border: 1px solid #10B981; border-radius: 8px; padding: 12px; margin-top: 15px; text-align: center;">
-        <span style="color: #10B981; font-weight: 600; font-size: 0.9rem;">🟢 Terkoneksi Cloud MotherDuck</span>
+        <span style="color: #10B981; font-weight: 600; font-size: 0.9rem;">🟢 Terkoneksi Cloud (tes_gen)</span>
     </div>
     """, unsafe_allow_html=True)
 else:
@@ -297,26 +259,40 @@ st.markdown('<h1 class="main-title">MotherDuck Product Catalog Portal</h1>', uns
 st.markdown('<p class="subtitle">Manajemen Inventaris & Katalog Produk Cloud Real-time</p>', unsafe_allow_html=True)
 st.markdown('<div class="gradient-line"></div>', unsafe_allow_html=True)
 
-# Jika belum terhubung, tampilkan panduan memulai
+# Jika belum terhubung, tampilkan panduan kesalahan kredensial secrets.toml
 if not st.session_state.conn_connected or 'con' not in st.session_state:
-    st.info("👋 Selamat Datang! Untuk memulai, masukkan **MotherDuck Token** Anda di sidebar kiri dan klik tombol **Sambungkan Ke MotherDuck 🚀**.")
+    st.error("🔴 Gagal terhubung secara aman ke MotherDuck Cloud.")
     
+    if st.session_state.db_error:
+        st.markdown(f"""
+        <div style="background-color: rgba(239, 68, 68, 0.08); border-left: 5px solid #EF4444; padding: 15px; border-radius: 8px; margin-bottom: 25px;">
+            <strong style="color: #EF4444; font-size: 1rem;">Detail Error Koneksi:</strong><br/>
+            <code style="color: #EF4444; font-size: 0.9rem;">{st.session_state.db_error}</code>
+        </div>
+        """, unsafe_allow_html=True)
+        
     col1, col2 = st.columns(2)
     with col1:
         st.markdown("""
-        ### Cara Mendapatkan Token MotherDuck:
-        1. Buka dan masuk ke akun [MotherDuck](https://motherduck.com).
-        2. Klik foto profil Anda di pojok kiri bawah layar.
-        3. Pilih opsi **"Copy token"**.
-        4. Tempelkan token tersebut pada kolom input di panel kiri aplikasi ini.
+        ### 🔑 Cara Mengonfigurasi Token MotherDuck:
+        Aplikasi ini menggunakan fitur **Streamlit Secrets** untuk mengamankan token Anda tanpa eksposur pada kode sumber.
+        
+        1. Buka file **`.streamlit/secrets.toml`** yang berada di root direktori proyek Anda.
+        2. Masukkan token asli Anda:
+           ```toml
+           MOTHERDUCK_TOKEN = "md_token_anda_disini"
+           ```
+        3. Simpan file tersebut, lalu muat ulang (*refresh*) halaman browser ini.
         """)
     with col2:
         st.markdown("""
-        ### Fitur Utama Aplikasi:
-        - **Desain Kelas Dunia:** Antarmuka modern dengan gaya glassmorphism adaptif.
-        - **Dukungan Skema Dinamis:** Mendeteksi skema tabel Anda secara real-time.
-        - **Operasi CRUD Lengkap:** Tambah, cari, ubah, dan hapus data produk dengan instan.
-        - **Metrik Pintar:** Visualisasi langsung statistik produk dan nilai inventaris.
+        ### 💡 Cara Mendapatkan Token:
+        1. Masuk ke dashboard [MotherDuck](https://motherduck.com).
+        2. Klik **foto profil** Anda di pojok kiri bawah layar.
+        3. Pilih opsi **"Copy token"**.
+        4. Salin dan tempelkan token tersebut di file `secrets.toml`.
+        
+        *Dengan menggunakan `st.secrets`, kredensial Anda disimpan secara lokal dan tidak akan pernah terunggah ke repositori publik.*
         """)
     st.stop()
 
