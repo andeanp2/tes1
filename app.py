@@ -928,6 +928,42 @@ else:
                     total_berat = df_cart['berat'].sum()
                     st.markdown(f"**Total Berat PO:** `{total_berat:,.2f}` gr")
                     
+                    st.markdown("---")
+                    st.markdown("##### ⚙️ Kelola Draft Item")
+                    
+                    item_options = [item['name'] for item in st.session_state.cart]
+                    selected_draft_item = st.selectbox("Pilih Item Draft untuk Dikelola/Diedit:", item_options, key="manage_draft_selectbox")
+                    
+                    selected_item_data = next((item for item in st.session_state.cart if item['name'] == selected_draft_item), None)
+                    
+                    if selected_item_data:
+                        col_draft_edit_weight, col_draft_action_buttons = st.columns([2, 1])
+                        with col_draft_edit_weight:
+                            new_draft_weight = st.number_input(
+                                "Ubah Berat Satuan (gr):",
+                                min_value=0.1,
+                                value=float(selected_item_data['berat']),
+                                step=1.0,
+                                format="%.2f",
+                                key=f"edit_draft_weight_{selected_draft_item}"
+                            )
+                        with col_draft_action_buttons:
+                            st.write("") # spacing
+                            st.write("") # spacing
+                            col_sub_save, col_sub_del = st.columns(2)
+                            with col_sub_save:
+                                if st.button("💾", help="Simpan Berat Baru", use_container_width=True, key=f"save_draft_item_{selected_draft_item}"):
+                                    selected_item_data['berat'] = new_draft_weight
+                                    st.toast(f"Berat item '{selected_draft_item}' diperbarui! 💾", icon="✅")
+                                    st.rerun()
+                            with col_sub_del:
+                                if st.button("❌", help="Hapus Item dari Draft", use_container_width=True, key=f"delete_draft_item_{selected_draft_item}"):
+                                    st.session_state.cart = [item for item in st.session_state.cart if item['name'] != selected_draft_item]
+                                    st.toast(f"Item '{selected_draft_item}' dihapus dari draft.", icon="🗑️")
+                                    st.rerun()
+                                    
+                    st.markdown("---")
+                    
                     col_clear, col_pay = st.columns(2)
                     with col_clear:
                         if st.button("🗑️ Kosongkan Draft PO", use_container_width=True, type="secondary"):
