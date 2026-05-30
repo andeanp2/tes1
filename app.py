@@ -129,9 +129,6 @@ def init_connection():
     # 4. Hubungkan langsung secara bersih tanpa f-string atau config dict
     con = duckdb.connect("md:New_db")
     
-    # Pastikan ekstensi terinstal dan dimuat secara online
-    con.execute("INSTALL motherduck;")
-    con.execute("LOAD motherduck;")
     return con
 
 # Inisialisasi koneksi secara otomatis saat aplikasi dimulai
