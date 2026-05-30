@@ -342,13 +342,13 @@ else:
 if st.session_state.conn_connected:
     st.sidebar.markdown("""
     <div style="background-color: rgba(16, 185, 129, 0.1); border: 1px solid #10B981; border-radius: 8px; padding: 12px; margin-top: 15px; text-align: center;">
-        <span style="color: #10B981; font-weight: 600; font-size: 0.9rem;">🟢 Terkoneksi Cloud (New_db)</span>
+        <span style="color: #10B981; font-weight: 600; font-size: 0.9rem;">🟢 Konek </span>
     </div>
     """, unsafe_allow_html=True)
 else:
     st.sidebar.markdown("""
     <div style="background-color: rgba(239, 68, 68, 0.1); border: 1px solid #EF4444; border-radius: 8px; padding: 12px; margin-top: 15px; text-align: center;">
-        <span style="color: #EF4444; font-weight: 600; font-size: 0.9rem;">🔴 Terputus dari Cloud</span>
+        <span style="color: #EF4444; font-weight: 600; font-size: 0.9rem;">🔴 Tidak Konek</span>
     </div>
     """, unsafe_allow_html=True)
     if st.session_state.db_error:
