@@ -157,6 +157,8 @@ if 'active_tab' not in st.session_state:
     st.session_state.active_tab = "Lihat Katalog"
 if 'cart' not in st.session_state:
     st.session_state.cart = []
+if 'receipt_cart' not in st.session_state:
+    st.session_state.receipt_cart = []
 if 'menu' not in st.session_state:
     st.session_state.menu = "🛍️ Katalog Produk"
 
@@ -1383,77 +1385,186 @@ elif st.session_state.menu == "📦 Penerimaan Barang":
         if df_catalog.empty:
             st.warning("Katalog produk kosong. Silakan tambahkan produk terlebih dahulu di menu Katalog Produk.")
         else:
-            col_rcv_form, col_rcv_preview = st.columns([1, 1])
+            # Inputs yang berlaku untuk seluruh kedatangan/Surat Jalan diletakkan di atas kolom
+            col_rcv_hdr1, col_rcv_hdr2 = st.columns(2)
+            with col_rcv_hdr1:
+                tgl_kedatangan = st.date_input("Tanggal Kedatangan *", datetime.date.today(), key="rcv_date_input")
+            with col_rcv_hdr2:
+                nama_sj = st.text_input("Nama Surat Jalan (Delivery Note) *", placeholder="Contoh: SJ-001, SJ-ABC", key="rcv_sj_input")
+                
+            st.markdown("---")
+            
+            col_rcv_form, col_rcv_preview = st.columns([1, 2])
             
             with col_rcv_form:
                 st.markdown("""
                 <div style="background-color: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1); padding: 20px; border-radius: 12px; margin-bottom:15px;">
-                    <h4 style="color: #6366F1; margin-top:0; margin-bottom:5px;">Formulir Penerimaan Barang</h4>
+                    <h4 style="color: #6366F1; margin-top:0; margin-bottom:5px;">➕ Tambah Item Penerimaan</h4>
+                    <p style="color: #6B7280; font-size: 0.8rem; margin:0;">Pilih produk dan masukkan berat kedatangannya.</p>
                 </div>
                 """, unsafe_allow_html=True)
-                
-                # Inputs
-                tgl_kedatangan = st.date_input("Tanggal Kedatangan *", datetime.date.today(), key="rcv_date_input")
-                nama_sj = st.text_input("Nama Surat Jalan (Delivery Note) *", placeholder="Contoh: SJ-001, SJ-ABC", key="rcv_sj_input")
                 
                 prod_names_rcv = df_catalog[name_col].dropna().astype(str).unique().tolist()
                 selected_prod_rcv = st.selectbox("Nama Produk (Katalog) *", prod_names_rcv, key="rcv_product_selectbox")
                 
                 berat_rcv = st.number_input("Berat Barang (gr) *", min_value=0.1, value=10.0, step=1.0, format="%.2f", key="rcv_weight_input")
                 
-            with col_rcv_preview:
-                st.markdown("#### 🔍 Kode Kedatangan & Ringkasan")
-                
-                # Generate RCV ID (Dukungan untuk multi-item per Surat Jalan di tanggal yang sama dengan suffix berurutan)
+                # Real-time RCV ID Preview untuk item draft berikutnya
                 import re
                 sj_clean = re.sub(r'[^a-zA-Z0-9]', '', nama_sj).upper() if nama_sj else "SJ"
                 tgl_str = tgl_kedatangan.strftime("%Y%m%d")
                 
-                # Cek database untuk kedatangan pada tanggal & surat jalan yang sama
-                item_count = 0
+                # Cek database + jumlah item yang saat ini ada di draft
+                db_item_count = 0
                 if st.session_state.conn_connected and 'con' in st.session_state and nama_sj.strip():
                     try:
                         q_count = "SELECT COUNT(*) FROM Penerimaan_Barang WHERE UPPER(TRIM(surat_jalan)) = UPPER(TRIM(?)) AND tanggal_kedatangan = ?"
-                        item_count = con.execute(q_count, (nama_sj.strip(), tgl_kedatangan)).fetchone()[0]
+                        db_item_count = con.execute(q_count, (nama_sj.strip(), tgl_kedatangan)).fetchone()[0]
                     except:
                         pass
                 
-                # Format: RCV-YYYYMMDD-[SJ_CLEAN]-[INDEX]
-                id_kedatangan = f"RCV-{tgl_str}-{sj_clean}-{item_count + 1}"
+                current_draft_count = len(st.session_state.receipt_cart)
+                preview_id = f"RCV-{tgl_str}-{sj_clean}-{db_item_count + current_draft_count + 1}"
                 
                 st.markdown(f"""
-                <div class="premium-card">
-                    <h4 style="color: #6366F1; margin-top: 0; margin-bottom: 10px;">🧾 Ringkasan Penerimaan</h4>
-                    <p style="margin: 5px 0;">ID Kedatangan: <b>{id_kedatangan}</b></p>
-                    <p style="margin: 5px 0;">Tanggal: <b>{tgl_kedatangan.strftime('%d %B %Y')}</b></p>
-                    <p style="margin: 5px 0;">Surat Jalan: <b>{nama_sj if nama_sj else '-'}</b></p>
-                    <p style="margin: 5px 0;">Produk: <b>{selected_prod_rcv}</b></p>
-                    <p style="margin: 5px 0;">Berat: <b>{berat_rcv:,.2f} gr</b></p>
+                <div style="background-color: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.08); padding: 12px; border-radius: 8px; margin-bottom: 15px;">
+                    <span style="color: #6B7280; font-size: 0.82rem;">Preview ID item berikutnya:</span><br/>
+                    <strong style="color: #6366F1; font-size: 1.05rem;">{preview_id}</strong>
                 </div>
                 """, unsafe_allow_html=True)
                 
-                submit_rcv_btn = st.button("Catat Penerimaan Barang 📥", use_container_width=True, type="primary", key="submit_receipt_btn")
+                add_to_rcv_cart_btn = st.button("Tambahkan ke Draft Penerimaan 📥", use_container_width=True, key="add_to_rcv_cart_btn")
                 
-                if submit_rcv_btn:
+                if add_to_rcv_cart_btn:
                     if not nama_sj.strip():
-                        st.error("Gagal! Nama Surat Jalan harus diisi.")
+                        st.error("Gagal! Nama Surat Jalan harus diisi terlebih dahulu.")
                     elif not selected_prod_rcv:
                         st.error("Gagal! Produk harus dipilih.")
                     else:
-                        try:
-                            # Simpan ke database Penerimaan_Barang
-                            insert_query = """
-                            INSERT INTO Penerimaan_Barang (ID_kedatangan, tanggal_kedatangan, surat_jalan, product_name, berat)
-                            VALUES (?, ?, ?, ?, ?)
-                            """
-                            con.execute(insert_query, (id_kedatangan, tgl_kedatangan, nama_sj.strip(), selected_prod_rcv, float(berat_rcv)))
+                        # Cek apakah produk sudah ada di draft
+                        found = False
+                        for item in st.session_state.receipt_cart:
+                            if item.get('product_name') == selected_prod_rcv:
+                                item['berat'] = item.get('berat', 0.0) + berat_rcv
+                                found = True
+                                break
+                                
+                        if not found:
+                            st.session_state.receipt_cart.append({
+                                'product_name': selected_prod_rcv,
+                                'berat': berat_rcv
+                            })
                             
-                            st.toast(f"Penerimaan {id_kedatangan} berhasil dicatat! 🎉", icon="✅")
-                            st.success(f"Sukses! Kedatangan barang **{selected_prod_rcv}** dengan Surat Jalan **{nama_sj}** telah disimpan ke cloud database.")
-                            st.cache_data.clear()
+                        st.toast(f"Item '{selected_prod_rcv}' berhasil ditambahkan ke draft! 📦", icon="✅")
+                        st.rerun()
+                        
+            with col_rcv_preview:
+                st.markdown("#### 📝 Draft Item Penerimaan Barang")
+                
+                if not st.session_state.receipt_cart:
+                    st.info("Draft Penerimaan Barang Anda saat ini kosong. Tambahkan item di sebelah kiri untuk menyusun penerimaan!")
+                else:
+                    # Konversi draft ke DataFrame
+                    df_rcv_cart = pd.DataFrame(st.session_state.receipt_cart)
+                    
+                    st.dataframe(
+                        df_rcv_cart,
+                        column_config={
+                            "product_name": st.column_config.TextColumn("Nama Produk", width="large"),
+                            "berat": st.column_config.NumberColumn("Berat Satuan (gr)", format="%.2f")
+                        },
+                        use_container_width=True,
+                        hide_index=True
+                    )
+                    
+                    # Hitung total berat & total item
+                    total_berat_draft = df_rcv_cart['berat'].sum()
+                    total_item_draft = len(df_rcv_cart)
+                    
+                    st.markdown(f"**Ringkasan Draft:** `{total_item_draft}` Produk | Total Berat: `{total_berat_draft:,.2f}` gr")
+                    
+                    st.markdown("---")
+                    st.markdown("##### ⚙️ Kelola Draft Item")
+                    
+                    item_options = [item['product_name'] for item in st.session_state.receipt_cart]
+                    selected_draft_item = st.selectbox("Pilih Item Draft untuk Dikelola/Diedit:", item_options, key="manage_rcv_draft_selectbox")
+                    
+                    selected_item_data = next((item for item in st.session_state.receipt_cart if item['product_name'] == selected_draft_item), None)
+                    
+                    if selected_item_data:
+                        col_draft_edit_weight, col_draft_action_buttons = st.columns([2, 1])
+                        with col_draft_edit_weight:
+                            new_draft_weight = st.number_input(
+                                "Ubah Berat (gr):",
+                                min_value=0.1,
+                                value=float(selected_item_data['berat']),
+                                step=1.0,
+                                format="%.2f",
+                                key=f"edit_rcv_draft_weight_{selected_draft_item}"
+                            )
+                        with col_draft_action_buttons:
+                            st.write("") # spacing
+                            st.write("") # spacing
+                            col_sub_save, col_sub_del = st.columns(2)
+                            with col_sub_save:
+                                if st.button("💾", help="Simpan Berat Baru", use_container_width=True, key=f"save_rcv_draft_item_{selected_draft_item}"):
+                                    selected_item_data['berat'] = new_draft_weight
+                                    st.toast(f"Berat item '{selected_draft_item}' diperbarui! 💾", icon="✅")
+                                    st.rerun()
+                            with col_sub_del:
+                                if st.button("❌", help="Hapus Item dari Draft", use_container_width=True, key=f"delete_rcv_draft_item_{selected_draft_item}"):
+                                    st.session_state.receipt_cart = [item for item in st.session_state.receipt_cart if item['product_name'] != selected_draft_item]
+                                    st.toast(f"Item '{selected_draft_item}' dihapus dari draft.", icon="🗑️")
+                                    st.rerun()
+                                    
+                    st.markdown("---")
+                    
+                    col_clear, col_save = st.columns(2)
+                    with col_clear:
+                        if st.button("🗑️ Kosongkan Draft", use_container_width=True, type="secondary", key="clear_rcv_draft_btn"):
+                            st.session_state.receipt_cart = []
+                            st.toast("Draft penerimaan dikosongkan.", icon="🗑️")
                             st.rerun()
-                        except Exception as e:
-                            st.error(f"Gagal mencatat penerimaan ke database: {e}")
+                    with col_save:
+                        submit_rcv_btn = st.button("Catat Semua ke Database 📥", use_container_width=True, type="primary", key="submit_receipt_btn")
+                        
+                        if submit_rcv_btn:
+                            if not nama_sj.strip():
+                                st.error("Gagal! Nama Surat Jalan harus diisi.")
+                            elif not st.session_state.receipt_cart:
+                                st.error("Gagal! Draft penerimaan barang masih kosong.")
+                            else:
+                                try:
+                                    # 1. Hitung counter awal di database untuk surat jalan & tanggal kedatangan ini
+                                    import re
+                                    sj_clean = re.sub(r'[^a-zA-Z0-9]', '', nama_sj).upper()
+                                    tgl_str = tgl_kedatangan.strftime("%Y%m%d")
+                                    
+                                    db_item_count = 0
+                                    try:
+                                        q_count = "SELECT COUNT(*) FROM Penerimaan_Barang WHERE UPPER(TRIM(surat_jalan)) = UPPER(TRIM(?)) AND tanggal_kedatangan = ?"
+                                        db_item_count = con.execute(q_count, (nama_sj.strip(), tgl_kedatangan)).fetchone()[0]
+                                    except:
+                                        pass
+                                    
+                                    # 2. Simpan setiap item draft ke database secara urut
+                                    num_items = len(st.session_state.receipt_cart)
+                                    for i, item in enumerate(st.session_state.receipt_cart):
+                                        final_id = f"RCV-{tgl_str}-{sj_clean}-{db_item_count + 1 + i}"
+                                        insert_query = """
+                                        INSERT INTO Penerimaan_Barang (ID_kedatangan, tanggal_kedatangan, surat_jalan, product_name, berat)
+                                        VALUES (?, ?, ?, ?, ?)
+                                        """
+                                        con.execute(insert_query, (final_id, tgl_kedatangan, nama_sj.strip(), item['product_name'], float(item['berat'])))
+                                    
+                                    # 3. Sukses, kosongkan draft
+                                    st.session_state.receipt_cart = []
+                                    st.toast("Semua item penerimaan barang berhasil dicatat! 🎉", icon="✅")
+                                    st.success(f"Sukses! {num_items} item penerimaan dengan Surat Jalan **{nama_sj}** telah disimpan ke cloud database.")
+                                    st.cache_data.clear()
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Gagal mencatat penerimaan ke database: {e}")
 
     # ----------------- TAB 2: RIWAYAT KEDATANGAN -----------------
     with tabs_rcv[1]:
