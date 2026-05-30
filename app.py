@@ -252,6 +252,24 @@ def create_default_table(con, table_name="Product_catalog"):
         st.error(f"Gagal membuat tabel default: {e}")
         return False
 
+def create_po_table(con):
+    try:
+        # Query pembuatan tabel Purchase_orders untuk mencatat pesanan PO aktif
+        create_query = """
+        CREATE TABLE IF NOT EXISTS Purchase_orders (
+            po_id VARCHAR PRIMARY KEY,
+            items_json VARCHAR NOT NULL,
+            total_berat DOUBLE NOT NULL,
+            status VARCHAR DEFAULT 'Active',
+            created_at TIMESTAMP DEFAULT (CURRENT_TIMESTAMP + INTERVAL 7 HOUR)
+        );
+        """
+        con.execute(create_query)
+        return True
+    except Exception as e:
+        st.error(f"Gagal membuat tabel Purchase_orders: {e}")
+        return False
+
 
 # 4. Tampilan Sidebar (Konfigurasi & Koneksi)
 st.sidebar.markdown("""
@@ -293,10 +311,32 @@ if st.session_state.conn_connected and 'con' in st.session_state:
     )
     st.session_state.menu = menu
     
+    # Submenu untuk Pemesanan PO
+    if menu == "🛒 Pemesanan PO":
+        st.sidebar.markdown("---")
+        st.sidebar.markdown("### 📝 Sub Menu PO")
+        
+        submenu_opts = ["➕ Tambah PO", "📄 PO Aktif", "✏️ Edit PO", "❌ Hapus PO"]
+        curr_submenu = st.session_state.get('submenu_po', "➕ Tambah PO")
+        default_idx = submenu_opts.index(curr_submenu) if curr_submenu in submenu_opts else 0
+        
+        submenu_po = st.sidebar.radio(
+            "Pilih Aksi PO:",
+            submenu_opts,
+            index=default_idx
+        )
+        st.session_state.submenu_po = submenu_po
+    else:
+        st.session_state.submenu_po = "➕ Tambah PO"
+    
     st.sidebar.markdown("### 🧭 Menu Aktif")
-    st.sidebar.info(f"{st.session_state.menu}")
+    if menu == "🛒 Pemesanan PO":
+        st.sidebar.info(f"{st.session_state.menu} > {st.session_state.get('submenu_po', '➕ Tambah PO')}")
+    else:
+        st.sidebar.info(f"{st.session_state.menu}")
 else:
     st.session_state.menu = "🛍️ Katalog Produk"
+    st.session_state.submenu_po = "➕ Tambah PO"
 
 # Tampilkan status koneksi di sidebar
 if st.session_state.conn_connected:
@@ -418,6 +458,10 @@ def fetch_catalog_data(_conn, table):
     except Exception as e:
         st.error(f"Gagal mengambil data: {e}")
         return pd.DataFrame()
+
+# Inisialisasi otomatis tabel Purchase_orders jika sudah terhubung
+if st.session_state.conn_connected and 'con' in st.session_state:
+    create_po_table(con)
 
 df_catalog = fetch_catalog_data(con, table_name)
 
@@ -797,106 +841,408 @@ if st.session_state.menu == "🛍️ Katalog Produk":
 
 else:
     # ------------------ MENU PEMESANAN PO ------------------
-    st.subheader("🛒 Pemesanan Purchase Order (PO)")
-    st.markdown("Simulasi Pembuatan & Pemesanan Purchase Order (PO) Barang.")
+    st.subheader(f"🛒 Pemesanan Purchase Order (PO) - {st.session_state.get('submenu_po', '➕ Tambah PO')}")
     st.markdown("---")
     
-    if df_catalog.empty:
-        st.warning("Katalog produk kosong. Silakan tambahkan produk terlebih dahulu di menu Katalog Produk.")
-    else:
-        col_form, col_cart_view = st.columns([1, 2])
+    current_submenu = st.session_state.get('submenu_po', '➕ Tambah PO')
+    
+    if current_submenu == "➕ Tambah PO":
+        st.markdown("Simulasi Pembuatan & Pemesanan Purchase Order (PO) Barang.")
         
-        with col_form:
-            st.markdown("""
-            <div style="background-color: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1); padding: 20px; border-radius: 12px; margin-bottom:15px;">
-                <h4 style="color: #6366F1; margin-top:0; margin-bottom:5px;">➕ Tambah Item PO</h4>
-                <p style="color: #6B7280; font-size: 0.8rem; margin:0;">Pilih Kode Barang berdasarkan Nama Produk</p>
-            </div>
-            """, unsafe_allow_html=True)
+        if df_catalog.empty:
+            st.warning("Katalog produk kosong. Silakan tambahkan produk terlebih dahulu di menu Katalog Produk.")
+        else:
+            col_form, col_cart_view = st.columns([1, 2])
             
-            # 1. Pilih kode barang (gabungan beberapa nama produk)
-            prod_names = df_catalog[name_col].dropna().astype(str).unique().tolist()
-            selected_names = st.multiselect("Pilih Produk *", prod_names, help="Pilih satu atau beberapa produk dari katalog.")
-            
-            # Input nama baru custom untuk gabungan produk
-            custom_name = ""
-            if selected_names:
-                custom_name = st.text_input("Nama Baru Gabungan (Kode Barang) *", placeholder="Ketik nama baru untuk gabungan produk ini...", help="Tuliskan nama custom untuk mewakili gabungan produk yang Anda pilih.")
-            
-            # 2. Tambahkan berat sebagai satuan PO
-            berat = st.number_input("Berat Satuan (kg/ton) *", min_value=0.1, value=10.0, step=1.0, format="%.2f")
-            
-            add_to_cart_btn = st.button("Tambahkan ke Draft PO 📥", use_container_width=True)
-            
-            if add_to_cart_btn:
-                if not selected_names:
-                    st.error("Gagal! Silakan pilih minimal satu produk terlebih dahulu.")
-                elif not custom_name.strip():
-                    st.error("Gagal! Silakan masukkan nama baru untuk gabungan produk ini.")
-                else:
-                    # Gunakan nama baru custom sebagai Kode_Barang
-                    entry_name = custom_name.strip()
-                    detail_str = ", ".join(selected_names)
-                    
-                    # Cek apakah barang sudah ada di draft PO
-                    found = False
-                    for item in st.session_state.cart:
-                        if item.get('name') == entry_name:
-                            item['berat'] = item.get('berat', 0.0) + berat
-                            item['detail_gabungan'] = detail_str
-                            found = True
-                            break
-                            
-                    if not found:
-                        st.session_state.cart.append({
-                            'name': entry_name,
-                            'detail_gabungan': detail_str,
-                            'berat': berat
-                        })
+            with col_form:
+                st.markdown("""
+                <div style="background-color: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1); padding: 20px; border-radius: 12px; margin-bottom:15px;">
+                    <h4 style="color: #6366F1; margin-top:0; margin-bottom:5px;">➕ Tambah Item PO</h4>
+                    <p style="color: #6B7280; font-size: 0.8rem; margin:0;">Pilih Kode Barang berdasarkan Nama Produk</p>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # 1. Pilih kode barang (gabungan beberapa nama produk)
+                prod_names = df_catalog[name_col].dropna().astype(str).unique().tolist()
+                selected_names = st.multiselect("Pilih Produk *", prod_names, help="Pilih satu atau beberapa produk dari katalog.")
+                
+                # Input nama baru custom untuk gabungan produk
+                custom_name = ""
+                if selected_names:
+                    custom_name = st.text_input("Nama Baru Gabungan (Kode Barang) *", placeholder="Ketik nama baru untuk gabungan produk ini...", help="Tuliskan nama custom untuk mewakili gabungan produk yang Anda pilih.")
+                
+                # 2. Tambahkan berat sebagai satuan PO
+                berat = st.number_input("Berat Satuan (gr) *", min_value=0.1, value=10.0, step=1.0, format="%.2f")
+                
+                add_to_cart_btn = st.button("Tambahkan ke Draft PO 📥", use_container_width=True)
+                
+                if add_to_cart_btn:
+                    if not selected_names:
+                        st.error("Gagal! Silakan pilih minimal satu produk terlebih dahulu.")
+                    elif not custom_name.strip():
+                        st.error("Gagal! Silakan masukkan nama baru untuk gabungan produk ini.")
+                    else:
+                        # Gunakan nama baru custom sebagai Kode_Barang
+                        entry_name = custom_name.strip()
+                        detail_str = ", ".join(selected_names)
                         
-                    st.toast(f"Item PO '{entry_name}' berhasil ditambahkan! 🛒", icon="✅")
-                    st.rerun()
+                        # Cek apakah barang sudah ada di draft PO
+                        found = False
+                        for item in st.session_state.cart:
+                            if item.get('name') == entry_name:
+                                item['berat'] = item.get('berat', 0.0) + berat
+                                item['detail_gabungan'] = detail_str
+                                found = True
+                                break
+                                
+                        if not found:
+                            st.session_state.cart.append({
+                                'name': entry_name,
+                                'detail_gabungan': detail_str,
+                                'berat': berat
+                            })
+                            
+                        st.toast(f"Item PO '{entry_name}' berhasil ditambahkan! 🛒", icon="✅")
+                        st.rerun()
+                    
+            with col_cart_view:
+                st.markdown("#### 📝 Draft Item Purchase Order")
                 
-        with col_cart_view:
-            st.markdown("#### 📝 Draft Item Purchase Order")
+                if not st.session_state.cart:
+                    st.info("Draft PO Anda saat ini kosong. Tambahkan item di sebelah kiri untuk menyusun PO!")
+                else:
+                    # Konversi draft ke DataFrame
+                    df_cart = pd.DataFrame(st.session_state.cart)
+                    
+                    # Tampilkan tabel draft dengan style premium
+                    st.dataframe(
+                        df_cart,
+                        column_config={
+                            "name": st.column_config.TextColumn("Kode Barang (Nama Baru)", width="medium"),
+                            "detail_gabungan": st.column_config.TextColumn("Detail Gabungan Produk", width="large"),
+                            "berat": st.column_config.NumberColumn("Berat Satuan (gr)", format="%.2f")
+                        },
+                        use_container_width=True,
+                        hide_index=True
+                    )
+                    
+                    # Hitung total berat
+                    total_berat = df_cart['berat'].sum()
+                    st.markdown(f"**Total Berat PO:** `{total_berat:,.2f}` gr")
+                    
+                    col_clear, col_pay = st.columns(2)
+                    with col_clear:
+                        if st.button("🗑️ Kosongkan Draft PO", use_container_width=True, type="secondary"):
+                            st.session_state.cart = []
+                            st.toast("Draft PO dikosongkan.", icon="🗑️")
+                            st.rerun()
+                    with col_pay:
+                        # Generate ID_PO unik
+                        if 'pending_po_id' not in st.session_state:
+                            st.session_state.pending_po_id = generate_po_id()
+                            
+                        po_id = st.session_state.pending_po_id
+                        
+                        if st.button(f"🧾 Terbitkan PO ({po_id})", use_container_width=True, type="primary"):
+                            try:
+                                import json
+                                cart_json = json.dumps(st.session_state.cart)
+                                
+                                # Simpan ke cloud database
+                                insert_po_query = """
+                                INSERT INTO Purchase_orders (po_id, items_json, total_berat, status)
+                                VALUES (?, ?, ?, 'Active')
+                                """
+                                con.execute(insert_po_query, (po_id, cart_json, float(total_berat)))
+                                
+                                st.session_state.cart = []
+                                st.session_state.pending_po_id = generate_po_id() # generate new ID for next PO
+                                st.toast(f"PO {po_id} Berhasil Diterbitkan! 🎉", icon="✅")
+                                st.success(f"Sukses! Purchase Order **{po_id}** senilai total **{total_berat:,.2f} gr** berat satuan telah berhasil disimpan ke database online.")
+                                st.cache_data.clear()
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Gagal menerbitkan PO ke database: {e}")
+
+    elif current_submenu == "📄 PO Aktif":
+        st.markdown("Daftar Purchase Order (PO) Aktif yang Tersimpan di Database.")
+        
+        # Helper untuk formatting
+        def format_po_items(items_json_str):
+            try:
+                import json
+                items = json.loads(items_json_str)
+                summary = []
+                for it in items:
+                    summary.append(f"{it.get('name')} ({it.get('berat'):,.2f} gr)")
+                return ", ".join(summary)
+            except:
+                return items_json_str
+                
+        # Ambil data PO dari database
+        try:
+            df_po = con.execute("SELECT * FROM Purchase_orders ORDER BY created_at DESC").fetchdf()
+        except Exception as e:
+            st.error(f"Gagal mengambil data PO: {e}")
+            df_po = pd.DataFrame()
             
-            if not st.session_state.cart:
-                st.info("Draft PO Anda saat ini kosong. Tambahkan item di sebelah kiri untuk menyusun PO!")
+        if df_po.empty:
+            st.info("Belum ada Purchase Order yang terdaftar di database.")
+        else:
+            df_po_active = df_po[df_po['status'] == 'Active'].copy()
+            if df_po_active.empty:
+                st.info("Tidak ada Purchase Order aktif saat ini.")
             else:
-                # Konversi draft ke DataFrame
-                df_cart = pd.DataFrame(st.session_state.cart)
+                # Filter pencarian
+                po_search = st.text_input("🔍 Cari PO berdasarkan ID PO", "")
+                if po_search:
+                    df_po_active = df_po_active[df_po_active['po_id'].astype(str).str.contains(po_search, case=False, na=False)]
                 
-                # Tampilkan tabel draft dengan style premium
+                # Format daftar barang
+                df_po_active['Daftar Barang'] = df_po_active['items_json'].apply(format_po_items)
+                
                 st.dataframe(
-                    df_cart,
+                    df_po_active[['po_id', 'Daftar Barang', 'total_berat', 'created_at']],
                     column_config={
-                        "name": st.column_config.TextColumn("Kode Barang (Nama Baru)", width="medium"),
-                        "detail_gabungan": st.column_config.TextColumn("Detail Gabungan Produk", width="large"),
-                        "berat": st.column_config.NumberColumn("Berat Satuan (gr)", format="%.2f")
+                        "po_id": st.column_config.TextColumn("ID PO", width="medium"),
+                        "Daftar Barang": st.column_config.TextColumn("Daftar Barang (Item & Berat)", width="large"),
+                        "total_berat": st.column_config.NumberColumn("Total Berat (gr)", format="%.2f"),
+                        "created_at": st.column_config.DatetimeColumn("Tanggal Terbit", format="DD/MM/YYYY HH:mm")
                     },
                     use_container_width=True,
                     hide_index=True
                 )
                 
-                # Hitung total berat
-                total_berat = df_cart['berat'].sum()
-                st.markdown(f"**Total Berat PO:** `{total_berat:,.2f}` gr")
+                st.markdown("### 🔍 Rincian Detail PO")
+                selected_po_id = st.selectbox("Pilih ID PO untuk melihat rincian:", df_po_active['po_id'].tolist(), key="po_active_detail_selectbox")
                 
-                col_clear, col_pay = st.columns(2)
-                with col_clear:
-                    if st.button("🗑️ Kosongkan Draft PO", use_container_width=True, type="secondary"):
-                        st.session_state.cart = []
-                        st.toast("Draft PO dikosongkan.", icon="🗑️")
-                        st.rerun()
-                with col_pay:
-                    # Generate ID_PO unik
-                    if 'pending_po_id' not in st.session_state:
-                        st.session_state.pending_po_id = generate_po_id()
+                if selected_po_id:
+                    po_row = df_po_active[df_po_active['po_id'] == selected_po_id].iloc[0]
+                    try:
+                        import json
+                        items = json.loads(po_row['items_json'])
                         
-                    po_id = st.session_state.pending_po_id
+                        st.markdown(f"""
+                        <div class="premium-card">
+                            <h3 style="color: #6366F1; margin-top: 0; margin-bottom: 5px;">🧾 Purchase Order: {selected_po_id}</h3>
+                            <p style="color: #6B7280; font-size: 0.85rem; margin-top:0;">Diterbitkan pada: <b>{po_row['created_at'].strftime('%d %B %Y %H:%M')} WIB</b></p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        df_items = pd.DataFrame(items)
+                        st.dataframe(
+                            df_items,
+                            column_config={
+                                "name": st.column_config.TextColumn("Nama / Kode Barang", width="medium"),
+                                "detail_gabungan": st.column_config.TextColumn("Detail Gabungan Produk", width="large"),
+                                "berat": st.column_config.NumberColumn("Berat Satuan (gr)", format="%.2f")
+                            },
+                            use_container_width=True,
+                            hide_index=True
+                        )
+                        
+                        st.markdown(f"**Total Berat Keseluruhan:** `{po_row['total_berat']:,.2f}` gr")
+                    except Exception as e:
+                        st.error(f"Gagal memuat rincian detail PO: {e}")
+
+    elif current_submenu == "✏️ Edit PO":
+        st.markdown("Ubah Item atau Berat dalam Purchase Order (PO) Aktif.")
+        
+        try:
+            df_po = con.execute("SELECT * FROM Purchase_orders ORDER BY created_at DESC").fetchdf()
+        except Exception as e:
+            st.error(f"Gagal mengambil data PO: {e}")
+            df_po = pd.DataFrame()
+            
+        if df_po.empty:
+            st.info("Belum ada Purchase Order untuk diedit.")
+        else:
+            df_po_active = df_po[df_po['status'] == 'Active'].copy()
+            if df_po_active.empty:
+                st.info("Tidak ada Purchase Order aktif saat ini.")
+            else:
+                po_list = df_po_active['po_id'].tolist()
+                
+                # Inisialisasi session state untuk editor PO jika belum ada
+                if 'editing_po_id' not in st.session_state:
+                    st.session_state.editing_po_id = None
+                if 'edit_cart' not in st.session_state:
+                    st.session_state.edit_cart = []
+                
+                # Dropdown pilihan PO
+                selected_po_to_edit = st.selectbox("Pilih PO untuk Diedit:", po_list, key="po_edit_selector")
+                
+                if st.button("Buka di Editor 🛠️", use_container_width=True, key="open_editor_btn"):
+                    st.session_state.editing_po_id = selected_po_to_edit
+                    po_row = df_po_active[df_po_active['po_id'] == selected_po_to_edit].iloc[0]
+                    try:
+                        import json
+                        st.session_state.edit_cart = json.loads(po_row['items_json'])
+                        st.toast(f"PO {selected_po_to_edit} berhasil dimuat ke editor!", icon="✅")
+                    except Exception as e:
+                        st.error(f"Gagal memuat data PO ke editor: {e}")
+                        
+                # Tampilkan form edit jika ada PO yang sedang aktif diedit
+                if st.session_state.editing_po_id:
+                    st.markdown("---")
+                    st.markdown(f"### ✏️ Mengedit PO: `{st.session_state.editing_po_id}`")
                     
-                    if st.button(f"🧾 Terbitkan PO ({po_id})", use_container_width=True, type="primary"):
-                        st.session_state.cart = []
-                        st.session_state.pending_po_id = generate_po_id() # generate new ID for next PO
-                        st.toast(f"PO {po_id} Berhasil Diterbitkan! 🎉", icon="✅")
-                        st.success(f"Sukses! Purchase Order **{po_id}** senilai total **{total_berat:,.2f} gr** berat satuan telah berhasil diproses secara online.")
+                    col_edit_form, col_edit_cart = st.columns([1, 2])
+                    
+                    with col_edit_form:
+                        st.markdown("""
+                        <div style="background-color: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1); padding: 20px; border-radius: 12px; margin-bottom:15px;">
+                            <h4 style="color: #6366F1; margin-top:0; margin-bottom:5px;">➕ Tambah Item Baru</h4>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        prod_names = df_catalog[name_col].dropna().astype(str).unique().tolist()
+                        e_selected_names = st.multiselect("Pilih Produk *", prod_names, key="edit_po_multiselect")
+                        
+                        e_custom_name = ""
+                        if e_selected_names:
+                            e_custom_name = st.text_input("Nama Baru Gabungan (Kode Barang) *", placeholder="Ketik nama baru...", key="edit_po_custom_name")
+                            
+                        e_berat = st.number_input("Berat Satuan (gr) *", min_value=0.1, value=10.0, step=1.0, format="%.2f", key="edit_po_berat")
+                        
+                        add_to_edit_btn = st.button("Tambahkan ke Editor PO 📥", use_container_width=True, key="add_to_edit_po_btn")
+                        
+                        if add_to_edit_btn:
+                            if not e_selected_names:
+                                st.error("Gagal! Pilih minimal satu produk.")
+                            elif not e_custom_name.strip():
+                                st.error("Gagal! Masukkan nama baru gabungan.")
+                            else:
+                                entry_name = e_custom_name.strip()
+                                detail_str = ", ".join(e_selected_names)
+                                
+                                found = False
+                                for item in st.session_state.edit_cart:
+                                    if item.get('name') == entry_name:
+                                        item['berat'] = item.get('berat', 0.0) + e_berat
+                                        item['detail_gabungan'] = detail_str
+                                        found = True
+                                        break
+                                        
+                                if not found:
+                                    st.session_state.edit_cart.append({
+                                        'name': entry_name,
+                                        'detail_gabungan': detail_str,
+                                        'berat': e_berat
+                                    })
+                                st.toast("Item berhasil ditambahkan ke editor PO!", icon="✅")
+                                st.rerun()
+                                
+                    with col_edit_cart:
+                        st.markdown("#### 📝 Daftar Item dalam Editor PO")
+                        
+                        if not st.session_state.edit_cart:
+                            st.warning("Editor PO kosong. Tambahkan minimal satu item.")
+                        else:
+                            df_edit_cart = pd.DataFrame(st.session_state.edit_cart)
+                            
+                            st.dataframe(
+                                df_edit_cart,
+                                column_config={
+                                    "name": st.column_config.TextColumn("Kode Barang", width="medium"),
+                                    "detail_gabungan": st.column_config.TextColumn("Detail Gabungan"),
+                                    "berat": st.column_config.NumberColumn("Berat (gr)", format="%.2f")
+                                },
+                                use_container_width=True,
+                                hide_index=True
+                            )
+                            
+                            total_berat_edit = df_edit_cart['berat'].sum()
+                            st.markdown(f"**Total Berat PO Baru:** `{total_berat_edit:,.2f}` gr")
+                            
+                            # Pilihan hapus item individual
+                            item_names = [item['name'] for item in st.session_state.edit_cart]
+                            item_to_remove = st.selectbox("Pilih item untuk dihapus dari PO:", item_names, key="edit_po_item_to_remove")
+                            
+                            if st.button("❌ Hapus Item dari Editor", use_container_width=True, key="remove_item_from_editor_btn"):
+                                st.session_state.edit_cart = [item for item in st.session_state.edit_cart if item['name'] != item_to_remove]
+                                st.toast(f"Item '{item_to_remove}' berhasil dihapus dari editor.", icon="🗑️")
+                                st.rerun()
+                            
+                            st.markdown("---")
+                            col_cancel, col_save = st.columns(2)
+                            with col_cancel:
+                                if st.button("❌ Batalkan Edit", use_container_width=True, key="cancel_edit_po_btn"):
+                                    st.session_state.editing_po_id = None
+                                    st.session_state.edit_cart = []
+                                    st.toast("Proses edit dibatalkan.", icon="ℹ️")
+                                    st.rerun()
+                            with col_save:
+                                if st.button("💾 Simpan Perubahan PO", use_container_width=True, type="primary", key="save_edit_po_btn"):
+                                    try:
+                                        import json
+                                        new_items_json = json.dumps(st.session_state.edit_cart)
+                                        
+                                        # Simpan ke cloud database
+                                        update_query = """
+                                        UPDATE Purchase_orders
+                                        SET items_json = ?, total_berat = ?
+                                        WHERE po_id = ?
+                                        """
+                                        con.execute(update_query, (new_items_json, float(total_berat_edit), st.session_state.editing_po_id))
+                                        
+                                        st.toast(f"PO {st.session_state.editing_po_id} berhasil diperbarui! 💾", icon="✅")
+                                        st.success(f"Sukses memperbarui Purchase Order **{st.session_state.editing_po_id}** di database!")
+                                        
+                                        st.session_state.editing_po_id = None
+                                        st.session_state.edit_cart = []
+                                        st.cache_data.clear()
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"Gagal menyimpan perubahan ke database: {e}")
+
+    elif current_submenu == "❌ Hapus PO":
+        st.markdown("Hapus Purchase Order (PO) Aktif dari Database.")
+        
+        try:
+            df_po = con.execute("SELECT * FROM Purchase_orders ORDER BY created_at DESC").fetchdf()
+        except Exception as e:
+            st.error(f"Gagal mengambil data PO: {e}")
+            df_po = pd.DataFrame()
+            
+        if df_po.empty:
+            st.info("Belum ada Purchase Order untuk dihapus.")
+        else:
+            df_po_active = df_po[df_po['status'] == 'Active'].copy()
+            if df_po_active.empty:
+                st.info("Tidak ada Purchase Order aktif saat ini.")
+            else:
+                po_list = df_po_active['po_id'].tolist()
+                
+                st.markdown("""
+                <div style="background-color: rgba(239, 68, 68, 0.1); border-left: 5px solid #EF4444; padding: 15px; border-radius: 4px; margin-bottom: 20px;">
+                    <strong style="color: #EF4444;">Peringatan Penting:</strong> Penghapusan PO bersifat permanen dan data yang dihapus akan langsung terhapus dari cloud database MotherDuck.
+                </div>
+                """, unsafe_allow_html=True)
+                
+                selected_po_to_del = st.selectbox("Pilih PO yang Ingin Dihapus:", po_list, key="po_delete_selector")
+                po_to_del_row = df_po_active[df_po_active['po_id'] == selected_po_to_del].iloc[0]
+                
+                st.markdown(f"Anda memilih untuk menghapus Purchase Order:")
+                st.code(f"ID PO: {selected_po_to_del}\nTotal Berat: {po_to_del_row['total_berat']:,.2f} gr\nTanggal Terbit: {po_to_del_row['created_at']}")
+                
+                confirm_check = st.checkbox("Saya memahami bahwa tindakan ini tidak dapat dibatalkan.", value=False, key="po_delete_confirm_checkbox")
+                
+                delete_po_btn = st.button("Hapus PO Secara Permanen 🗑️", type="primary", use_container_width=True, key="delete_po_permanently_btn")
+                
+                if delete_po_btn:
+                    if not confirm_check:
+                        st.error("Silakan centang kotak persetujuan konfirmasi terlebih dahulu untuk melanjutkan.")
+                    else:
+                        try:
+                            # Hapus dari database
+                            delete_query = "DELETE FROM Purchase_orders WHERE po_id = ?"
+                            con.execute(delete_query, (selected_po_to_del,))
+                            
+                            st.toast(f"PO {selected_po_to_del} telah dihapus dari database. 🗑️", icon="⚠️")
+                            st.success(f"Purchase Order `{selected_po_to_del}` berhasil dihapus secara permanen!")
+                            
+                            st.cache_data.clear()
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Gagal menghapus PO: {e}")
