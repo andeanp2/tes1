@@ -136,10 +136,14 @@ def init_connection():
 
 # Inisialisasi koneksi secara otomatis saat aplikasi dimulai
 try:
-    con = init_connection()
-    st.session_state.con = con
-    st.session_state.conn_connected = True
-    st.session_state.db_error = None
+    if "MOTHERDUCK_TOKEN" in st.secrets:
+        con = init_connection()
+        st.session_state.con = con
+        st.session_state.conn_connected = True
+        st.session_state.db_error = None
+    else:
+        st.session_state.conn_connected = False
+        st.session_state.db_error = "Kredensial rahasia 'MOTHERDUCK_TOKEN' belum dikonfigurasi di Streamlit Secrets."
 except Exception as e:
     st.session_state.conn_connected = False
     st.session_state.db_error = str(e)
