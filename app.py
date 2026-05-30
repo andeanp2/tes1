@@ -100,6 +100,50 @@ st.markdown("""
         margin-bottom: 2rem;
         width: 100%;
     }
+    
+    /* Sidebar Brand Card Premium */
+    .sidebar-brand-card {
+        background: linear-gradient(135deg, rgba(99, 102, 241, 0.12) 0%, rgba(168, 85, 247, 0.06) 100%);
+        border: 1px solid rgba(99, 102, 241, 0.25);
+        border-radius: 16px;
+        padding: 22px 16px;
+        text-align: center;
+        margin-bottom: 25px;
+        box-shadow: 0 8px 32px rgba(99, 102, 241, 0.03);
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .sidebar-brand-card::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        left: -50%;
+        width: 200%;
+        height: 200%;
+        background: radial-gradient(circle, rgba(168, 85, 247, 0.08) 0%, transparent 70%);
+        pointer-events: none;
+    }
+
+    .sidebar-brand-title {
+        font-family: 'Outfit', sans-serif;
+        font-size: 1.8rem;
+        font-weight: 800;
+        background: linear-gradient(135deg, #6366F1 0%, #A855F7 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin: 0;
+        letter-spacing: 0.5px;
+    }
+
+    .sidebar-brand-subtitle {
+        font-size: 0.8rem;
+        color: #9CA3AF;
+        margin-top: 6px;
+        margin-bottom: 0;
+        font-weight: 500;
+        line-height: 1.3;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -304,11 +348,11 @@ def create_receipt_table(con):
 db_name = "New_db"
 table_name = "Product_catalog"
 
-# Tampilkan Header Portal AWE di bagian paling atas sidebar
+# Tampilkan Header Portal AWE di bagian paling atas sidebar (Desain Premium)
 st.sidebar.markdown("""
-<div style="text-align: center; margin-bottom: 20px;">
-    <h2 style="color: #6366F1; font-weight: 700; margin-bottom: 0;">Portal AWE</h2>
-    <p style="color: #6B7280; font-size: 0.85rem;">Manajemen & Portal Data Cloud Real-time</p>
+<div class="sidebar-brand-card">
+    <h2 class="sidebar-brand-title">Portal AWE</h2>
+    <p class="sidebar-brand-subtitle">Manajemen & Portal Data Cloud Real-time</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -338,21 +382,27 @@ if st.session_state.conn_connected and 'con' in st.session_state:
 else:
     st.session_state.menu = "🛍️ Katalog Produk"
 
-# Tampilkan status koneksi di sidebar
+# Tampilkan status koneksi di sidebar (Sleek Glassmorphic Pill)
 if st.session_state.conn_connected:
     st.sidebar.markdown("""
-    <div style="background-color: rgba(16, 185, 129, 0.1); border: 1px solid #10B981; border-radius: 8px; padding: 12px; margin-top: 15px; text-align: center;">
-        <span style="color: #10B981; font-weight: 600; font-size: 0.9rem;">🟢 Konek </span>
+    <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 12px; padding: 10px; margin-top: 20px; text-align: center; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.05);">
+        <span style="color: #10B981; font-weight: 600; font-size: 0.85rem; display: inline-flex; align-items: center; gap: 6px; justify-content: center;">
+            <span style="width: 8px; height: 8px; background-color: #10B981; border-radius: 50%; display: inline-block; box-shadow: 0 0 8px #10B981;"></span>
+            Cloud Terkoneksi (WIB)
+        </span>
     </div>
     """, unsafe_allow_html=True)
 else:
     st.sidebar.markdown("""
-    <div style="background-color: rgba(239, 68, 68, 0.1); border: 1px solid #EF4444; border-radius: 8px; padding: 12px; margin-top: 15px; text-align: center;">
-        <span style="color: #EF4444; font-weight: 600; font-size: 0.9rem;">🔴 Tidak Konek</span>
+    <div style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 12px; padding: 10px; margin-top: 20px; text-align: center; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.05);">
+        <span style="color: #EF4444; font-weight: 600; font-size: 0.85rem; display: inline-flex; align-items: center; gap: 6px; justify-content: center;">
+            <span style="width: 8px; height: 8px; background-color: #EF4444; border-radius: 50%; display: inline-block; box-shadow: 0 0 8px #EF4444;"></span>
+            Terputus Cloud
+        </span>
     </div>
     """, unsafe_allow_html=True)
     if st.session_state.db_error:
-        st.sidebar.error(f"Error: {st.session_state.db_error}")
+        st.sidebar.error(f"Detail: {st.session_state.db_error}")
 
 
 # 5. Dashboard Utama (Dinamis Berdasarkan Menu yang Dipilih)
