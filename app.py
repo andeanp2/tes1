@@ -312,39 +312,17 @@ if st.session_state.conn_connected and 'con' in st.session_state:
     # 2. Menu Navigasi Utama
     st.sidebar.markdown("---")
     st.sidebar.markdown("### 🧭 Menu Navigasi")
-    menu = st.sidebar.radio(
+    menu = st.sidebar.selectbox(
         "Pilih Halaman:",
         ["🛍️ Katalog Produk", "🛒 Pemesanan PO"],
         index=0 if st.session_state.get('menu', "🛍️ Katalog Produk") == "🛍️ Katalog Produk" else 1
     )
     st.session_state.menu = menu
     
-    # Submenu untuk Pemesanan PO
-    if menu == "🛒 Pemesanan PO":
-        st.sidebar.markdown("---")
-        st.sidebar.markdown("### 📝 Sub Menu PO")
-        
-        submenu_opts = ["➕ Tambah PO", "📄 PO Aktif", "✏️ Edit PO", "❌ Hapus PO"]
-        curr_submenu = st.session_state.get('submenu_po', "➕ Tambah PO")
-        default_idx = submenu_opts.index(curr_submenu) if curr_submenu in submenu_opts else 0
-        
-        submenu_po = st.sidebar.radio(
-            "Pilih Aksi PO:",
-            submenu_opts,
-            index=default_idx
-        )
-        st.session_state.submenu_po = submenu_po
-    else:
-        st.session_state.submenu_po = "➕ Tambah PO"
-    
     st.sidebar.markdown("### 🧭 Menu Aktif")
-    if menu == "🛒 Pemesanan PO":
-        st.sidebar.info(f"{st.session_state.menu} > {st.session_state.get('submenu_po', '➕ Tambah PO')}")
-    else:
-        st.sidebar.info(f"{st.session_state.menu}")
+    st.sidebar.info(f"{st.session_state.menu}")
 else:
     st.session_state.menu = "🛍️ Katalog Produk"
-    st.session_state.submenu_po = "➕ Tambah PO"
 
 # Tampilkan status koneksi di sidebar
 if st.session_state.conn_connected:
@@ -849,12 +827,12 @@ if st.session_state.menu == "🛍️ Katalog Produk":
 
 else:
     # ------------------ MENU PEMESANAN PO ------------------
-    st.subheader(f"🛒 Pemesanan Purchase Order (PO) - {st.session_state.get('submenu_po', '➕ Tambah PO')}")
+    st.subheader("🛒 Pemesanan Purchase Order (PO)")
     st.markdown("---")
     
-    current_submenu = st.session_state.get('submenu_po', '➕ Tambah PO')
+    tabs_po = st.tabs(["➕ Tambah PO", "📄 PO Aktif", "✏️ Edit PO", "❌ Hapus PO"])
     
-    if current_submenu == "➕ Tambah PO":
+    with tabs_po[0]:
         st.markdown("Simulasi Pembuatan & Pemesanan Purchase Order (PO) Barang.")
         
         if df_catalog.empty:
@@ -991,7 +969,7 @@ else:
                                 except Exception as e:
                                     st.error(f"Gagal menerbitkan PO ke database: {e}")
 
-    elif current_submenu == "📄 PO Aktif":
+    with tabs_po[1]:
         st.markdown("Daftar Purchase Order (PO) Aktif yang Tersimpan di Database.")
         
         # Helper untuk formatting
@@ -1074,7 +1052,7 @@ else:
                     except Exception as e:
                         st.error(f"Gagal memuat rincian detail PO: {e}")
 
-    elif current_submenu == "✏️ Edit PO":
+    with tabs_po[2]:
         st.markdown("Ubah Item atau Berat dalam Purchase Order (PO) Aktif.")
         
         try:
@@ -1235,7 +1213,7 @@ else:
                                         except Exception as e:
                                             st.error(f"Gagal menyimpan perubahan ke database: {e}")
 
-    elif current_submenu == "❌ Hapus PO":
+    with tabs_po[3]:
         st.markdown("Hapus Purchase Order (PO) Aktif dari Database.")
         
         try:
