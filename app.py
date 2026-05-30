@@ -304,6 +304,14 @@ def create_receipt_table(con):
 db_name = "New_db"
 table_name = "Product_catalog"
 
+# Tampilkan Header Portal AWE di bagian paling atas sidebar
+st.sidebar.markdown("""
+<div style="text-align: center; margin-bottom: 20px;">
+    <h2 style="color: #6366F1; font-weight: 700; margin-bottom: 0;">Portal AWE</h2>
+    <p style="color: #6B7280; font-size: 0.85rem;">Manajemen & Portal Data Cloud Real-time</p>
+</div>
+""", unsafe_allow_html=True)
+
 if st.session_state.conn_connected and 'con' in st.session_state:
     con = st.session_state.con
     
@@ -356,6 +364,10 @@ menu_titles = {
     "🛒 Pemesanan PO": {
         "title": "Pemesanan Purchase Order (PO)",
         "subtitle": "Simulasi Pembuatan & Transaksi Purchase Order Cloud Real-time"
+    },
+    "📦 Penerimaan Barang": {
+        "title": "Penerimaan Barang (Goods Receipt)",
+        "subtitle": "Manajemen & Riwayat Penerimaan Barang Cloud Real-time"
     }
 }
 
