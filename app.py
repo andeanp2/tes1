@@ -1404,14 +1404,22 @@ elif st.session_state.menu == "📦 Penerimaan Barang":
             with col_rcv_preview:
                 st.markdown("#### 🔍 Kode Kedatangan & Ringkasan")
                 
-                # Generate RCV ID
-                if 'receipt_rand_num' not in st.session_state:
-                    st.session_state.receipt_rand_num = random.randint(1000, 9999)
-                
+                # Generate RCV ID (Dukungan untuk multi-item per Surat Jalan di tanggal yang sama dengan suffix berurutan)
                 import re
                 sj_clean = re.sub(r'[^a-zA-Z0-9]', '', nama_sj).upper() if nama_sj else "SJ"
                 tgl_str = tgl_kedatangan.strftime("%Y%m%d")
-                id_kedatangan = f"RCV-{tgl_str}-{sj_clean}-{st.session_state.receipt_rand_num}"
+                
+                # Cek database untuk kedatangan pada tanggal & surat jalan yang sama
+                item_count = 0
+                if st.session_state.conn_connected and 'con' in st.session_state and nama_sj.strip():
+                    try:
+                        q_count = "SELECT COUNT(*) FROM Penerimaan_Barang WHERE UPPER(TRIM(surat_jalan)) = UPPER(TRIM(?)) AND tanggal_kedatangan = ?"
+                        item_count = con.execute(q_count, (nama_sj.strip(), tgl_kedatangan)).fetchone()[0]
+                    except:
+                        pass
+                
+                # Format: RCV-YYYYMMDD-[SJ_CLEAN]-[INDEX]
+                id_kedatangan = f"RCV-{tgl_str}-{sj_clean}-{item_count + 1}"
                 
                 st.markdown(f"""
                 <div class="premium-card">
@@ -1440,8 +1448,6 @@ elif st.session_state.menu == "📦 Penerimaan Barang":
                             """
                             con.execute(insert_query, (id_kedatangan, tgl_kedatangan, nama_sj.strip(), selected_prod_rcv, float(berat_rcv)))
                             
-                            # Generate new random number for next arrival
-                            st.session_state.receipt_rand_num = random.randint(1000, 9999)
                             st.toast(f"Penerimaan {id_kedatangan} berhasil dicatat! 🎉", icon="✅")
                             st.success(f"Sukses! Kedatangan barang **{selected_prod_rcv}** dengan Surat Jalan **{nama_sj}** telah disimpan ke cloud database.")
                             st.cache_data.clear()
