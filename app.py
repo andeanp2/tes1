@@ -299,38 +299,15 @@ def create_receipt_table(con):
         return False
 
 
-# 4. Tampilan Sidebar (Konfigurasi & Koneksi)
-st.sidebar.markdown("""
-<div style="text-align: center; margin-bottom: 20px;">
-    <h2 style="color: #6366F1; font-weight: 700; margin-bottom: 0;">MD Control Panel</h2>
-    <p style="color: #6B7280; font-size: 0.85rem;">Koneksi Database MotherDuck (Online Cloud)</p>
-</div>
-""", unsafe_allow_html=True)
-
-# Parameter default
+# 4. Tampilan Sidebar (Menu Navigasi & Status)
+# Parameter default tetap didefinisikan agar tidak error di bagian lain code
 db_name = "New_db"
 table_name = "Product_catalog"
 
 if st.session_state.conn_connected and 'con' in st.session_state:
     con = st.session_state.con
     
-    # 1. Menampilkan detail akun online
-    try:
-        user_info = con.execute("SELECT current_user()").fetchone()[0]
-        st.sidebar.info(f"☁️ Akun: **{user_info}**")
-    except:
-        pass
-        
-    st.sidebar.markdown("### 🗄️ Lingkup Database Cloud")
-    
-    # Database default yang terhubung
-    st.sidebar.text_input("Database Terkoneksi", value=db_name, disabled=True, help="Database target yang telah terhubung.")
-    
-    # Tentukan nama tabel
-    table_name = st.sidebar.text_input("Table Name", value="Product_catalog")
-    
-    # 2. Menu Navigasi Utama
-    st.sidebar.markdown("---")
+    # Menu Navigasi Utama langsung diletakkan di bagian paling atas
     st.sidebar.markdown("### 🧭 Menu Navigasi")
     
     menu_options = ["🛍️ Katalog Produk", "🛒 Pemesanan PO", "📦 Penerimaan Barang"]
@@ -344,8 +321,12 @@ if st.session_state.conn_connected and 'con' in st.session_state:
     )
     st.session_state.menu = menu
     
-    st.sidebar.markdown("### 🧭 Menu Aktif")
-    st.sidebar.info(f"{st.session_state.menu}")
+    # Detail akun online ditampilkan secara compact
+    try:
+        user_info = con.execute("SELECT current_user()").fetchone()[0]
+        st.sidebar.markdown(f"<span style='color: #6B7280; font-size: 0.85rem;'>☁️ Terhubung sebagai: <b>{user_info}</b></span>", unsafe_allow_html=True)
+    except:
+        pass
 else:
     st.session_state.menu = "🛍️ Katalog Produk"
 
