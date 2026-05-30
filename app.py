@@ -1420,7 +1420,7 @@ elif st.session_state.menu == "📦 Penerimaan Barang":
                     <p style="margin: 5px 0;">Tanggal: <b>{tgl_kedatangan.strftime('%d %B %Y')}</b></p>
                     <p style="margin: 5px 0;">Surat Jalan: <b>{nama_sj if nama_sj else '-'}</b></p>
                     <p style="margin: 5px 0;">Produk: <b>{selected_prod_rcv}</b></p>
-                    <p style="margin: 5px 0;">Berat Satuan: <b>{berat_rcv:,.2f} gr</b></p>
+                    <p style="margin: 5px 0;">Berat: <b>{berat_rcv:,.2f} gr</b></p>
                 </div>
                 """, unsafe_allow_html=True)
                 
