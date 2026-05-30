@@ -279,6 +279,25 @@ def create_po_table(con):
         st.error(f"Gagal membuat tabel Purchase_orders: {e}")
         return False
 
+def create_receipt_table(con):
+    try:
+        # Query pembuatan tabel Penerimaan_Barang untuk mencatat kedatangan barang
+        create_query = """
+        CREATE TABLE IF NOT EXISTS Penerimaan_Barang (
+            ID_kedatangan VARCHAR PRIMARY KEY,
+            tanggal_kedatangan DATE NOT NULL,
+            surat_jalan VARCHAR NOT NULL,
+            product_name VARCHAR NOT NULL,
+            berat DOUBLE NOT NULL,
+            created_at TIMESTAMP DEFAULT (CURRENT_TIMESTAMP + INTERVAL 7 HOUR)
+        );
+        """
+        con.execute(create_query)
+        return True
+    except Exception as e:
+        st.error(f"Gagal membuat tabel Penerimaan_Barang: {e}")
+        return False
+
 
 # 4. Tampilan Sidebar (Konfigurasi & Koneksi)
 st.sidebar.markdown("""
@@ -313,10 +332,15 @@ if st.session_state.conn_connected and 'con' in st.session_state:
     # 2. Menu Navigasi Utama
     st.sidebar.markdown("---")
     st.sidebar.markdown("### 🧭 Menu Navigasi")
+    
+    menu_options = ["🛍️ Katalog Produk", "🛒 Pemesanan PO", "📦 Penerimaan Barang"]
+    curr_menu = st.session_state.get('menu', "🛍️ Katalog Produk")
+    default_idx = menu_options.index(curr_menu) if curr_menu in menu_options else 0
+    
     menu = st.sidebar.selectbox(
         "Pilih Halaman:",
-        ["🛍️ Katalog Produk", "🛒 Pemesanan PO"],
-        index=0 if st.session_state.get('menu', "🛍️ Katalog Produk") == "🛍️ Katalog Produk" else 1
+        menu_options,
+        index=default_idx
     )
     st.session_state.menu = menu
     
@@ -446,9 +470,10 @@ def fetch_catalog_data(_conn, table):
         st.error(f"Gagal mengambil data: {e}")
         return pd.DataFrame()
 
-# Inisialisasi otomatis tabel Purchase_orders jika sudah terhubung
+# Inisialisasi otomatis tabel Purchase_orders & Penerimaan_Barang jika sudah terhubung
 if st.session_state.conn_connected and 'con' in st.session_state:
     create_po_table(con)
+    create_receipt_table(con)
 
 df_catalog = fetch_catalog_data(con, table_name)
 
@@ -826,7 +851,7 @@ if st.session_state.menu == "🛍️ Katalog Produk":
                     except Exception as e:
                         st.error(f"Gagal menghapus data dari database: {e}")
 
-else:
+elif st.session_state.menu == "🛒 Pemesanan PO":
     # ------------------ MENU PEMESANAN PO ------------------
     st.subheader("🛒 Pemesanan Purchase Order (PO)")
     st.markdown("---")
@@ -1300,3 +1325,244 @@ else:
                             st.rerun()
                         except Exception as e:
                             st.error(f"Gagal menghapus PO: {e}")
+
+elif st.session_state.menu == "📦 Penerimaan Barang":
+    # ------------------ MENU PENERIMAAN BARANG ------------------
+    st.subheader("📦 Penerimaan Barang (Goods Receipt)")
+    st.markdown("---")
+    
+    tabs_rcv = st.tabs(["📥 Catat Penerimaan", "📋 Riwayat Kedatangan", "✏️ Edit Penerimaan", "❌ Hapus Penerimaan"])
+    
+    # ----------------- TAB 1: CATAT PENERIMAAN -----------------
+    with tabs_rcv[0]:
+        st.markdown("Catat kedatangan barang baru ke dalam sistem.")
+        
+        if df_catalog.empty:
+            st.warning("Katalog produk kosong. Silakan tambahkan produk terlebih dahulu di menu Katalog Produk.")
+        else:
+            col_rcv_form, col_rcv_preview = st.columns([1, 1])
+            
+            with col_rcv_form:
+                st.markdown("""
+                <div style="background-color: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1); padding: 20px; border-radius: 12px; margin-bottom:15px;">
+                    <h4 style="color: #6366F1; margin-top:0; margin-bottom:5px;">Formulir Penerimaan Barang</h4>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # Inputs
+                tgl_kedatangan = st.date_input("Tanggal Kedatangan *", datetime.date.today(), key="rcv_date_input")
+                nama_sj = st.text_input("Nama Surat Jalan (Delivery Note) *", placeholder="Contoh: SJ-001, SJ-ABC", key="rcv_sj_input")
+                
+                prod_names_rcv = df_catalog[name_col].dropna().astype(str).unique().tolist()
+                selected_prod_rcv = st.selectbox("Nama Produk (Katalog) *", prod_names_rcv, key="rcv_product_selectbox")
+                
+                berat_rcv = st.number_input("Berat Barang (gr) *", min_value=0.1, value=10.0, step=1.0, format="%.2f", key="rcv_weight_input")
+                
+            with col_rcv_preview:
+                st.markdown("#### 🔍 Kode Kedatangan & Ringkasan")
+                
+                # Generate RCV ID
+                if 'receipt_rand_num' not in st.session_state:
+                    st.session_state.receipt_rand_num = random.randint(1000, 9999)
+                
+                import re
+                sj_clean = re.sub(r'[^a-zA-Z0-9]', '', nama_sj).upper() if nama_sj else "SJ"
+                tgl_str = tgl_kedatangan.strftime("%Y%m%d")
+                id_kedatangan = f"RCV-{tgl_str}-{sj_clean}-{st.session_state.receipt_rand_num}"
+                
+                st.markdown(f"""
+                <div class="premium-card">
+                    <h4 style="color: #6366F1; margin-top: 0; margin-bottom: 10px;">🧾 Ringkasan Penerimaan</h4>
+                    <p style="margin: 5px 0;">ID Kedatangan: <b>{id_kedatangan}</b></p>
+                    <p style="margin: 5px 0;">Tanggal: <b>{tgl_kedatangan.strftime('%d %B %Y')}</b></p>
+                    <p style="margin: 5px 0;">Surat Jalan: <b>{nama_sj if nama_sj else '-'}</b></p>
+                    <p style="margin: 5px 0;">Produk: <b>{selected_prod_rcv}</b></p>
+                    <p style="margin: 5px 0;">Berat Satuan: <b>{berat_rcv:,.2f} gr</b></p>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                submit_rcv_btn = st.button("Catat Penerimaan Barang 📥", use_container_width=True, type="primary", key="submit_receipt_btn")
+                
+                if submit_rcv_btn:
+                    if not nama_sj.strip():
+                        st.error("Gagal! Nama Surat Jalan harus diisi.")
+                    elif not selected_prod_rcv:
+                        st.error("Gagal! Produk harus dipilih.")
+                    else:
+                        try:
+                            # Simpan ke database Penerimaan_Barang
+                            insert_query = """
+                            INSERT INTO Penerimaan_Barang (ID_kedatangan, tanggal_kedatangan, surat_jalan, product_name, berat)
+                            VALUES (?, ?, ?, ?, ?)
+                            """
+                            con.execute(insert_query, (id_kedatangan, tgl_kedatangan, nama_sj.strip(), selected_prod_rcv, float(berat_rcv)))
+                            
+                            # Generate new random number for next arrival
+                            st.session_state.receipt_rand_num = random.randint(1000, 9999)
+                            st.toast(f"Penerimaan {id_kedatangan} berhasil dicatat! 🎉", icon="✅")
+                            st.success(f"Sukses! Kedatangan barang **{selected_prod_rcv}** dengan Surat Jalan **{nama_sj}** telah disimpan ke cloud database.")
+                            st.cache_data.clear()
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Gagal mencatat penerimaan ke database: {e}")
+
+    # ----------------- TAB 2: RIWAYAT KEDATANGAN -----------------
+    with tabs_rcv[1]:
+        st.markdown("Daftar Penerimaan Barang yang Tercatat dalam Database.")
+        
+        try:
+            df_receipts = con.execute("SELECT * FROM Penerimaan_Barang ORDER BY tanggal_kedatangan DESC, created_at DESC").fetchdf()
+        except Exception as e:
+            st.error(f"Gagal mengambil data penerimaan: {e}")
+            df_receipts = pd.DataFrame()
+            
+        if df_receipts.empty:
+            st.info("Belum ada data penerimaan barang yang tercatat.")
+        else:
+            # Metrics
+            total_rcv = len(df_receipts)
+            total_berat_rcv = df_receipts['berat'].sum()
+            
+            col_m1, col_m2 = st.columns(2)
+            with col_m1:
+                st.markdown(f"""
+                <div class="premium-card">
+                    <p style="color: #6B7280; font-size: 0.9rem; font-weight: 500; margin: 0;">Total Kedatangan</p>
+                    <h2 style="color: #6366F1; font-size: 2.2rem; font-weight: 700; margin: 5px 0 0 0;">{total_rcv} kali</h2>
+                </div>
+                """, unsafe_allow_html=True)
+            with col_m2:
+                st.markdown(f"""
+                <div class="premium-card">
+                    <p style="color: #6B7280; font-size: 0.9rem; font-weight: 500; margin: 0;">Total Berat Masuk</p>
+                    <h2 style="color: #10B981; font-size: 2.2rem; font-weight: 700; margin: 5px 0 0 0;">{total_berat_rcv:,.2f} gr</h2>
+                </div>
+                """, unsafe_allow_html=True)
+                
+            st.markdown("---")
+            # Search Filter
+            search_rcv = st.text_input("🔍 Cari berdasarkan ID Kedatangan, Surat Jalan, atau Produk", "", key="search_receipt_input")
+            df_rcv_filtered = df_receipts.copy()
+            if search_rcv:
+                id_match = df_rcv_filtered['ID_kedatangan'].astype(str).str.contains(search_rcv, case=False, na=False)
+                sj_match = df_rcv_filtered['surat_jalan'].astype(str).str.contains(search_rcv, case=False, na=False)
+                prod_match = df_rcv_filtered['product_name'].astype(str).str.contains(search_rcv, case=False, na=False)
+                df_rcv_filtered = df_rcv_filtered[id_match | sj_match | prod_match]
+                
+            st.dataframe(
+                df_rcv_filtered[['ID_kedatangan', 'tanggal_kedatangan', 'surat_jalan', 'product_name', 'berat', 'created_at']],
+                column_config={
+                    "ID_kedatangan": st.column_config.TextColumn("ID Kedatangan", width="medium"),
+                    "tanggal_kedatangan": st.column_config.DateColumn("Tgl Kedatangan", format="DD/MM/YYYY"),
+                    "surat_jalan": st.column_config.TextColumn("Surat Jalan"),
+                    "product_name": st.column_config.TextColumn("Nama Produk"),
+                    "berat": st.column_config.NumberColumn("Berat (gr)", format="%.2f"),
+                    "created_at": st.column_config.DatetimeColumn("Waktu Input", format="DD/MM/YYYY HH:mm")
+                },
+                use_container_width=True,
+                hide_index=True
+            )
+
+    # ----------------- TAB 3: EDIT PENERIMAAN -----------------
+    with tabs_rcv[2]:
+        st.markdown("Ubah rincian data penerimaan barang yang telah dicatat.")
+        
+        try:
+            df_receipts = con.execute("SELECT * FROM Penerimaan_Barang ORDER BY tanggal_kedatangan DESC").fetchdf()
+        except Exception as e:
+            df_receipts = pd.DataFrame()
+            
+        if df_receipts.empty:
+            st.info("Belum ada data penerimaan barang untuk diubah.")
+        else:
+            rcv_list = [f"{row['ID_kedatangan']} - {row['product_name']} ({row['surat_jalan']})" for _, row in df_receipts.iterrows()]
+            selected_rcv_to_edit = st.selectbox("Pilih Data Penerimaan yang Ingin Diubah:", rcv_list, key="rcv_edit_selector")
+            
+            selected_rcv_id = selected_rcv_to_edit.split(" - ")[0]
+            rcv_row = df_receipts[df_receipts['ID_kedatangan'] == selected_rcv_id].iloc[0]
+            
+            # Form Edit
+            with st.form("edit_receipt_form"):
+                st.markdown(f"**Mengedit ID Kedatangan:** `{selected_rcv_id}`")
+                
+                # Convert tanggal_kedatangan
+                try:
+                    curr_date = pd.to_datetime(rcv_row['tanggal_kedatangan']).date()
+                except:
+                    curr_date = datetime.date.today()
+                    
+                edit_tgl = st.date_input("Tanggal Kedatangan *", curr_date, key="edit_rcv_date")
+                edit_sj = st.text_input("Nama Surat Jalan *", value=rcv_row['surat_jalan'], key="edit_rcv_sj")
+                
+                prod_names_rcv = df_catalog[name_col].dropna().astype(str).unique().tolist()
+                default_prod_idx = prod_names_rcv.index(rcv_row['product_name']) if rcv_row['product_name'] in prod_names_rcv else 0
+                edit_prod = st.selectbox("Nama Produk (Katalog) *", prod_names_rcv, index=default_prod_idx, key="edit_rcv_product")
+                
+                edit_berat = st.number_input("Berat Barang (gr) *", min_value=0.1, value=float(rcv_row['berat']), step=1.0, format="%.2f", key="edit_rcv_weight")
+                
+                save_rcv_btn = st.form_submit_button("Simpan Perubahan Data Penerimaan 💾", use_container_width=True)
+                
+                if save_rcv_btn:
+                    if not edit_sj.strip():
+                        st.error("Nama Surat Jalan tidak boleh kosong!")
+                    else:
+                        try:
+                            update_rcv_query = """
+                            UPDATE Penerimaan_Barang
+                            SET tanggal_kedatangan = ?, surat_jalan = ?, product_name = ?, berat = ?
+                            WHERE ID_kedatangan = ?
+                            """
+                            con.execute(update_rcv_query, (edit_tgl, edit_sj.strip(), edit_prod, float(edit_berat), selected_rcv_id))
+                            
+                            st.toast(f"Data {selected_rcv_id} berhasil diperbarui! 💾", icon="✅")
+                            st.success(f"Sukses memperbarui rincian kedatangan barang **{selected_rcv_id}** di database!")
+                            st.cache_data.clear()
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Gagal memperbarui data penerimaan ke database: {e}")
+
+    # ----------------- TAB 4: HAPUS PENERIMAAN -----------------
+    with tabs_rcv[3]:
+        st.markdown("Hapus catatan kedatangan barang secara permanen.")
+        
+        try:
+            df_receipts = con.execute("SELECT * FROM Penerimaan_Barang ORDER BY tanggal_kedatangan DESC").fetchdf()
+        except Exception as e:
+            df_receipts = pd.DataFrame()
+            
+        if df_receipts.empty:
+            st.info("Belum ada data penerimaan barang untuk dihapus.")
+        else:
+            rcv_del_list = [f"{row['ID_kedatangan']} - {row['product_name']} ({row['surat_jalan']})" for _, row in df_receipts.iterrows()]
+            selected_rcv_to_del = st.selectbox("Pilih Data Penerimaan yang Ingin Dihapus:", rcv_del_list, key="rcv_delete_selector")
+            
+            selected_rcv_del_id = selected_rcv_to_del.split(" - ")[0]
+            rcv_del_row = df_receipts[df_receipts['ID_kedatangan'] == selected_rcv_del_id].iloc[0]
+            
+            st.markdown("""
+            <div style="background-color: rgba(239, 68, 68, 0.1); border-left: 5px solid #EF4444; padding: 15px; border-radius: 4px; margin-bottom: 20px;">
+                <strong style="color: #EF4444;">Peringatan Penting:</strong> Tindakan ini bersifat permanen dan data penerimaan akan langsung terhapus dari cloud database MotherDuck.
+            </div>
+            """, unsafe_allow_html=True)
+            
+            st.markdown(f"Anda memilih untuk menghapus data kedatangan barang:")
+            st.code(f"ID Kedatangan: {selected_rcv_del_id}\nProduk: {rcv_del_row['product_name']}\nSurat Jalan: {rcv_del_row['surat_jalan']}\nBerat: {rcv_del_row['berat']:,.2f} gr")
+            
+            confirm_rcv_del = st.checkbox("Saya memahami bahwa tindakan ini tidak dapat dibatalkan.", value=False, key="rcv_delete_confirm_checkbox")
+            
+            delete_rcv_btn = st.button("Hapus Data Penerimaan Secara Permanen 🗑️", type="primary", use_container_width=True, key="delete_rcv_permanently_btn")
+            
+            if delete_rcv_btn:
+                if not confirm_rcv_del:
+                    st.error("Silakan centang kotak persetujuan konfirmasi terlebih dahulu untuk melanjutkan.")
+                else:
+                    try:
+                        delete_rcv_query = "DELETE FROM Penerimaan_Barang WHERE ID_kedatangan = ?"
+                        con.execute(delete_rcv_query, (selected_rcv_del_id,))
+                        
+                        st.toast(f"Penerimaan {selected_rcv_del_id} berhasil dihapus. 🗑️", icon="⚠️")
+                        st.success(f"Data penerimaan `{selected_rcv_del_id}` berhasil dihapus secara permanen!")
+                        st.cache_data.clear()
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Gagal menghapus data penerimaan dari database: {e}")
