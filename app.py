@@ -258,6 +258,7 @@ def create_po_table(con):
         create_query = """
         CREATE TABLE IF NOT EXISTS Purchase_orders (
             po_id VARCHAR PRIMARY KEY,
+            customer_name VARCHAR,
             items_json VARCHAR NOT NULL,
             total_berat DOUBLE NOT NULL,
             status VARCHAR DEFAULT 'Active',
@@ -265,6 +266,13 @@ def create_po_table(con):
         );
         """
         con.execute(create_query)
+        
+        # Migrasi kolom customer_name untuk meng-handle jika tabel lama sudah ada
+        try:
+            con.execute("ALTER TABLE Purchase_orders ADD COLUMN customer_name VARCHAR;")
+        except:
+            pass # Kolom sudah ada
+            
         return True
     except Exception as e:
         st.error(f"Gagal membuat tabel Purchase_orders: {e}")
@@ -852,6 +860,18 @@ else:
         if df_catalog.empty:
             st.warning("Katalog produk kosong. Silakan tambahkan produk terlebih dahulu di menu Katalog Produk.")
         else:
+            # 👤 Input Informasi Customer
+            st.markdown("""
+            <div style="background-color: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1); padding: 16px; border-radius: 12px; margin-bottom:15px;">
+                <h4 style="color: #6366F1; margin-top:0; margin-bottom:5px;">👤 Informasi Customer & ID PO Dinamis</h4>
+                <p style="color: #6B7280; font-size: 0.8rem; margin:0;">Ketik nama customer di bawah untuk menyusun kode PO secara real-time.</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            customer_name = st.text_input("Nama Customer *", placeholder="Ketik nama lengkap customer...", key="po_customer_name")
+            
+            st.markdown("---")
+            
             col_form, col_cart_view = st.columns([1, 2])
             
             with col_form:
@@ -937,32 +957,39 @@ else:
                             st.toast("Draft PO dikosongkan.", icon="🗑️")
                             st.rerun()
                     with col_pay:
-                        # Generate ID_PO unik
-                        if 'pending_po_id' not in st.session_state:
-                            st.session_state.pending_po_id = generate_po_id()
-                            
-                        po_id = st.session_state.pending_po_id
+                        # Generate ID_PO unik dengan nama customer agar tidak flickering saat mengetik
+                        if 'po_rand_num' not in st.session_state:
+                            st.session_state.po_rand_num = random.randint(1000, 9999)
+                        
+                        import re
+                        cust_clean = re.sub(r'[^a-zA-Z0-9]', '', customer_name).upper() if customer_name else "CUST"
+                        today_str = datetime.datetime.now().strftime("%Y%m%d")
+                        po_id = f"PO-{today_str}-{cust_clean}-{st.session_state.po_rand_num}"
                         
                         if st.button(f"🧾 Terbitkan PO ({po_id})", use_container_width=True, type="primary"):
-                            try:
-                                import json
-                                cart_json = json.dumps(st.session_state.cart)
-                                
-                                # Simpan ke cloud database
-                                insert_po_query = """
-                                INSERT INTO Purchase_orders (po_id, items_json, total_berat, status)
-                                VALUES (?, ?, ?, 'Active')
-                                """
-                                con.execute(insert_po_query, (po_id, cart_json, float(total_berat)))
-                                
-                                st.session_state.cart = []
-                                st.session_state.pending_po_id = generate_po_id() # generate new ID for next PO
-                                st.toast(f"PO {po_id} Berhasil Diterbitkan! 🎉", icon="✅")
-                                st.success(f"Sukses! Purchase Order **{po_id}** senilai total **{total_berat:,.2f} gr** berat satuan telah berhasil disimpan ke database online.")
-                                st.cache_data.clear()
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"Gagal menerbitkan PO ke database: {e}")
+                            if not customer_name.strip():
+                                st.error("Gagal! Silakan masukkan nama customer terlebih dahulu di kolom atas.")
+                            else:
+                                try:
+                                    import json
+                                    cart_json = json.dumps(st.session_state.cart)
+                                    
+                                    # Simpan ke cloud database beserta customer_name
+                                    insert_po_query = """
+                                    INSERT INTO Purchase_orders (po_id, customer_name, items_json, total_berat, status)
+                                    VALUES (?, ?, ?, ?, 'Active')
+                                    """
+                                    con.execute(insert_po_query, (po_id, customer_name.strip(), cart_json, float(total_berat)))
+                                    
+                                    st.session_state.cart = []
+                                    # Generate nomor acak baru untuk PO selanjutnya
+                                    st.session_state.po_rand_num = random.randint(1000, 9999)
+                                    st.toast(f"PO {po_id} Berhasil Diterbitkan! 🎉", icon="✅")
+                                    st.success(f"Sukses! Purchase Order **{po_id}** atas nama **{customer_name}** senilai total **{total_berat:,.2f} gr** telah berhasil disimpan ke database online.")
+                                    st.cache_data.clear()
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Gagal menerbitkan PO ke database: {e}")
 
     elif current_submenu == "📄 PO Aktif":
         st.markdown("Daftar Purchase Order (PO) Aktif yang Tersimpan di Database.")
@@ -1002,9 +1029,10 @@ else:
                 df_po_active['Daftar Barang'] = df_po_active['items_json'].apply(format_po_items)
                 
                 st.dataframe(
-                    df_po_active[['po_id', 'Daftar Barang', 'total_berat', 'created_at']],
+                    df_po_active[['po_id', 'customer_name', 'Daftar Barang', 'total_berat', 'created_at']],
                     column_config={
                         "po_id": st.column_config.TextColumn("ID PO", width="medium"),
+                        "customer_name": st.column_config.TextColumn("Nama Customer", width="medium"),
                         "Daftar Barang": st.column_config.TextColumn("Daftar Barang (Item & Berat)", width="large"),
                         "total_berat": st.column_config.NumberColumn("Total Berat (gr)", format="%.2f"),
                         "created_at": st.column_config.DatetimeColumn("Tanggal Terbit", format="DD/MM/YYYY HH:mm")
@@ -1025,6 +1053,7 @@ else:
                         st.markdown(f"""
                         <div class="premium-card">
                             <h3 style="color: #6366F1; margin-top: 0; margin-bottom: 5px;">🧾 Purchase Order: {selected_po_id}</h3>
+                            <p style="color: #374151; font-weight: 500; margin: 5px 0;">👤 Customer: <b>{po_row.get('customer_name', '-')}</b></p>
                             <p style="color: #6B7280; font-size: 0.85rem; margin-top:0;">Diterbitkan pada: <b>{po_row['created_at'].strftime('%d %B %Y %H:%M')} WIB</b></p>
                         </div>
                         """, unsafe_allow_html=True)
@@ -1078,6 +1107,7 @@ else:
                     try:
                         import json
                         st.session_state.edit_cart = json.loads(po_row['items_json'])
+                        st.session_state.edit_customer_name = po_row.get('customer_name', '')
                         st.toast(f"PO {selected_po_to_edit} berhasil dimuat ke editor!", icon="✅")
                     except Exception as e:
                         st.error(f"Gagal memuat data PO ke editor: {e}")
@@ -1086,6 +1116,10 @@ else:
                 if st.session_state.editing_po_id:
                     st.markdown("---")
                     st.markdown(f"### ✏️ Mengedit PO: `{st.session_state.editing_po_id}`")
+                    
+                    # Input customer name inside editor
+                    edit_customer_name = st.text_input("Nama Customer *", value=st.session_state.get('edit_customer_name', ''), key="edit_customer_name_input")
+                    st.markdown("---")
                     
                     col_edit_form, col_edit_cart = st.columns([1, 2])
                     
@@ -1170,31 +1204,36 @@ else:
                                 if st.button("❌ Batalkan Edit", use_container_width=True, key="cancel_edit_po_btn"):
                                     st.session_state.editing_po_id = None
                                     st.session_state.edit_cart = []
+                                    st.session_state.edit_customer_name = ""
                                     st.toast("Proses edit dibatalkan.", icon="ℹ️")
                                     st.rerun()
                             with col_save:
                                 if st.button("💾 Simpan Perubahan PO", use_container_width=True, type="primary", key="save_edit_po_btn"):
-                                    try:
-                                        import json
-                                        new_items_json = json.dumps(st.session_state.edit_cart)
-                                        
-                                        # Simpan ke cloud database
-                                        update_query = """
-                                        UPDATE Purchase_orders
-                                        SET items_json = ?, total_berat = ?
-                                        WHERE po_id = ?
-                                        """
-                                        con.execute(update_query, (new_items_json, float(total_berat_edit), st.session_state.editing_po_id))
-                                        
-                                        st.toast(f"PO {st.session_state.editing_po_id} berhasil diperbarui! 💾", icon="✅")
-                                        st.success(f"Sukses memperbarui Purchase Order **{st.session_state.editing_po_id}** di database!")
-                                        
-                                        st.session_state.editing_po_id = None
-                                        st.session_state.edit_cart = []
-                                        st.cache_data.clear()
-                                        st.rerun()
-                                    except Exception as e:
-                                        st.error(f"Gagal menyimpan perubahan ke database: {e}")
+                                    if not edit_customer_name.strip():
+                                        st.error("Gagal! Nama customer tidak boleh kosong.")
+                                    else:
+                                        try:
+                                            import json
+                                            new_items_json = json.dumps(st.session_state.edit_cart)
+                                            
+                                            # Simpan ke cloud database
+                                            update_query = """
+                                            UPDATE Purchase_orders
+                                            SET items_json = ?, total_berat = ?, customer_name = ?
+                                            WHERE po_id = ?
+                                            """
+                                            con.execute(update_query, (new_items_json, float(total_berat_edit), edit_customer_name.strip(), st.session_state.editing_po_id))
+                                            
+                                            st.toast(f"PO {st.session_state.editing_po_id} berhasil diperbarui! 💾", icon="✅")
+                                            st.success(f"Sukses memperbarui Purchase Order **{st.session_state.editing_po_id}** di database!")
+                                            
+                                            st.session_state.editing_po_id = None
+                                            st.session_state.edit_cart = []
+                                            st.session_state.edit_customer_name = ""
+                                            st.cache_data.clear()
+                                            st.rerun()
+                                        except Exception as e:
+                                            st.error(f"Gagal menyimpan perubahan ke database: {e}")
 
     elif current_submenu == "❌ Hapus PO":
         st.markdown("Hapus Purchase Order (PO) Aktif dari Database.")
